@@ -33,6 +33,7 @@ impl LogEntry {
     }
 }
 
+#[derive(Clone)]
 pub struct ExampleDurabilityLayer {
     tx: Option<mpsc::Sender<LogEntry>>,
     durable_offset: Arc<Mutex<Option<TxOffset>>>,
@@ -162,26 +163,42 @@ impl DurabilityLayer for ExampleDurabilityLayer {
 
 #[cfg(test)]
 mod tests {
-    use crate::datastore::{self, tx_data::InsertList};
-
+    use tokio::runtime::{Runtime, Builder};
+    use crate::datastore::{tx_data::InsertList, self};
     use super::*;
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Duration};
+
+    fn create_runtime() -> Runtime {
+        Builder::new_multi_thread()
+            .worker_threads(4)
+            .enable_all()
+            .build()
+            .unwrap()
+    }
+
+    const WAIT_TIMEOUT: Duration = Duration::from_secs(1);
 
     #[test]
     fn test_append_tx() {
         let tmp_dir = tempdir::TempDir::new("test_append_tx").unwrap();
         let path = tmp_dir.path().join("log.bin");
-        let mut durability_layer = ExampleDurabilityLayer::new(path.to_str().unwrap());
         let tx_offset = TxOffset(0);
-        let tx_data = TxData {
-            inserts: Arc::new([InsertList {
-                table_id: datastore::TableId(0),
-                inserts: Arc::new([]),
-            }]),
-            deletes: Arc::new([]),
-            truncs: Arc::new([]),
-        };
-        durability_layer.append_tx(tx_offset, tx_data);
+        let durability_layer = ExampleDurabilityLayer::new(path.to_str().unwrap());
+        let runtime = create_runtime();
+        let mut dl = durability_layer.clone();
+        runtime.spawn(async move {
+            let tx_data = TxData {
+                inserts: Arc::new([InsertList {
+                    table_id: datastore::TableId(0),
+                    inserts: Arc::new([]),
+                }]),
+                deletes: Arc::new([]),
+                truncs: Arc::new([]),
+            };
+            dl.append_tx(tx_offset, tx_data);
+        });
+        std::thread::sleep(WAIT_TIMEOUT);   // wait for tx1 to be replicated...
+
         let mut iter = durability_layer.iter();
         let (actual_tx_offset, _actual_tx_data) = iter.next().unwrap();
         assert_eq!(actual_tx_offset.0, tx_offset.0);

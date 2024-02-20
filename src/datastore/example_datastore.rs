@@ -17,6 +17,7 @@ use super::{
 type SharedWriteGuard<T> = ArcRwLockWriteGuard<RawRwLock, T>;
 type SharedReadGuard<T> = ArcRwLockReadGuard<RawRwLock, T>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ExampleRow {
     key: String,
     value: String,
@@ -131,11 +132,11 @@ impl CommittedState {
         tx_offset: super::TxOffset,
     ) -> Result<(), super::error::DatastoreError> {
         for (k, tx_diff) in &mut self.committed_diff {
-            for i in 0..tx_diff.history.len() {
+            while !tx_diff.history.is_empty() {
                 // TODO: This is all a bit silly.
                 // This should binary search to the latest
                 // offset less than or equal to the durability offset
-                let (offset, diff) = tx_diff.history.remove(i);
+                let (offset, diff) = tx_diff.history.remove(0);
                 if offset.0 <= tx_offset.0 {
                     match diff {
                         Diff::Insert(value) => {
@@ -162,6 +163,7 @@ impl CommittedState {
         &mut self,
     ) -> Result<(), super::error::DatastoreError> {
         self.committed_diff = HashMap::new();
+        self.next_tx_offset = self.replicated_tx_offset.map_or(TxOffset(0), |replicated| TxOffset(replicated.0 + 1));
         Ok(())
     }
 }
@@ -313,6 +315,24 @@ impl Datastore<String, String> for ExampleDatastore {
 
     fn replay_transaction(&self, data: &TxData) -> Result<(), super::error::DatastoreError> {
         let mut committed_state = self.committed_state.write();
+        // You should not be able to replay a transaction on top of a state that is ahead of the replicated state
+        match committed_state.replicated_tx_offset {
+            Some(offset) => {
+                if committed_state.next_tx_offset.0 != offset.0 + 1 {
+                    return Err(super::error::DatastoreError::InvalidDurabilityOffset);
+                }
+            }
+            None => {
+                if committed_state.next_tx_offset != TxOffset(0) {
+                    return Err(super::error::DatastoreError::InvalidDurabilityOffset);
+                }
+            }
+        }
+        committed_state.replicated_tx_offset = Some(
+            committed_state
+                .replicated_tx_offset
+                .map_or(TxOffset(0), |val| TxOffset(val.0 + 1)),
+        );
         committed_state.next_tx_offset.0 += 1;
 
         for insert_list in data.inserts.iter() {
@@ -474,5 +494,46 @@ mod tests {
         let tx = datastore.begin_tx(DurabilityLevel::Replicated);
         assert_eq!(tx.get(&"foo".to_string()), None);
         datastore.release_tx(tx);
+    }
+
+    #[test]
+    /// This test tests that replay transactions are only allowed to be replayed
+    /// on top of a state that is at the replicated durability offset.
+    fn test_example_datastore_replay_invalid_offset() {
+        let datastore = ExampleDatastore::new();
+
+        // We create a transaction and commit it
+        let mut tx = datastore.begin_mut_tx();
+        tx.set("foo".to_string(), "bar".to_string());
+        let result = datastore.commit_mut_tx(tx).unwrap();
+
+        // We advance the replicated durability offset to 0
+        datastore
+            .advance_replicated_durability_offset(result.tx_offset)
+            .unwrap();
+
+        // We create a new datastore and try to replay the transaction
+        let datastore2 = ExampleDatastore::new();
+        let result = datastore2.replay_transaction(&result.tx_data);
+        assert!(result.is_ok());
+
+        // We create a new transaction and commit it
+        let mut tx = datastore.begin_mut_tx();
+        tx.set("foo".to_string(), "baz".to_string());
+        let result = datastore.commit_mut_tx(tx).unwrap();
+
+        // We advance the replicated durability offset to 1
+        datastore
+            .advance_replicated_durability_offset(result.tx_offset)
+            .unwrap();
+
+        // We create a new transaction in datastore 2 and commit it
+        let mut tx = datastore2.begin_mut_tx();
+        tx.set("foo".to_string(), "bar".to_string());
+        let result = datastore2.commit_mut_tx(tx).unwrap();
+
+        // We try to replay the transaction on top of a state that is ahead of the replicated durability offset
+        let result = datastore2.replay_transaction(&result.tx_data);
+        assert!(result.is_err());
     }
 }

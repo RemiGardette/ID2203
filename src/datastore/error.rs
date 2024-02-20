@@ -12,6 +12,8 @@ pub enum DatastoreError {
     DeleteDeserializationError,
     #[error("Cannot make a mutable transaction if not the leader.")]
     NotLeader,
+    #[error("Cannot replay a transaction on top of a datastore with unreplicated changes.")]
+    InvalidDurabilityOffset,
 }
 
 impl Default for DatastoreError {
