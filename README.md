@@ -12,7 +12,7 @@ Run the DataStore in a replicated Manner
 
 - When do follower nodes apply their transactions?
 - How should DataStore react to failures and leader changes
-- Application is a game where ** the latency for committing transactions locally is critical and prioritized over consistency **
+- Application is a game where **the latency for committing transactions locally is critical and prioritized over consistency**
 
 ### Task
 - [ ] Implement OmniPaxosDurability struct provided in the skeleton code
