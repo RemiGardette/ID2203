@@ -1,6 +1,7 @@
 use omnipaxos::util::NodeId;
 use std::sync::{Mutex, Arc};
 use super::*;
+use crate::durability::example_durability
 
 /// OmniPaxosDurability is a OmniPaxos node that should provide the replicated
 /// implementation of the DurabilityLayer trait required by the Datastore.
