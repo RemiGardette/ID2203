@@ -4,6 +4,7 @@ use super::*;
 use crate::datastore::example_datastore::Tx;
 use crate::datastore::{tx_data::TxData, TxOffset};
 use omnipaxos::util::LogEntry as OmniLogEntry;
+use omnipaxos::ProposeErr;
 use omnipaxos::{messages::Message, util::NodeId, OmniPaxos};
 use omnipaxos_storage::memory_storage::MemoryStorage;
 use omnipaxos::macros::Entry;
@@ -74,7 +75,11 @@ impl DurabilityLayer for OmniPaxosDurability {
             tx_offset,
             tx_data,
         };
-        let _ = self.omni_paxos.append(log);
+        match self.omni_paxos.append(log) {
+            Ok(v) => println!("Entry appended to omnipaxos {v:?}"),
+            Err(e) => println!("Error appending entry to omnipaxos: {e:?}"),
+        }
+
     }
     
     // This is a function to decide the transaction durable offset
