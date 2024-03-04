@@ -1,6 +1,7 @@
-# FROM rust:1.67
+FROM rust:1.76.0-slim-buster
 
-# WORKDIR /usr/src/myapp
-# COPY . .
+WORKDIR /usr/src/myapp
+COPY . .
 
-# CMD ["cargo", "run"]
+CMD ["cargo", "run"]
+
