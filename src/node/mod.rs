@@ -3,7 +3,7 @@ use crate::datastore::example_datastore::ExampleDatastore;
 use crate::datastore::tx_data::TxResult;
 use crate::datastore::*;
 use crate::durability::omnipaxos_durability::OmniPaxosDurability;
-use crate::durability::{DurabilityLayer, DurabilityLevel};
+use crate::durability::{DurabilityLevel};
 use omnipaxos::messages::*;
 use omnipaxos::util::NodeId;
 use std::collections::HashMap;
@@ -25,14 +25,22 @@ impl NodeRunner {
     }
 }
 
+type DurabilityLayer = Arc<Mutex<OmniPaxosDurability>>;
+
 pub struct Node {
     node_id: NodeId, // Unique identifier for the node
-                     // TODO Datastore and OmniPaxosDurability
+    pub durability: Arc<Mutex<OmniPaxosDurability>>,        
+    datastore: ExampleDatastore        // TODO Datastore and OmniPaxosDurability
 }
 
 impl Node {
     pub fn new(node_id: NodeId, omni_durability: OmniPaxosDurability) -> Self {
-        todo!()
+        Node {
+            node_id,
+            durability: Arc::new(Mutex::new(omni_durability)),
+            datastore: ExampleDatastore::new(),
+        }
+        node.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
     }
 
     /// update who is the current leader. If a follower becomes the leader,
@@ -65,7 +73,12 @@ impl Node {
     pub fn begin_mut_tx(
         &self,
     ) -> Result<<ExampleDatastore as Datastore<String, String>>::MutTx, DatastoreError> {
-        todo!()
+        let leader_id = self.durability.lock().unwrap().omni_paxos.get_current_leader();
+        if leader_id == Some(self.node_id) {
+            Ok(self.datastore.begin_mut_tx())
+        } else {
+            Err(DatastoreError::NotLeader)
+        }   
     }
 
     /// Commits a mutable transaction. Only the leader is allowed to do so.

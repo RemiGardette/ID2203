@@ -1,16 +1,11 @@
 use self::example_durability::ExampleDurabilityLayer;
 
 use super::*;
-use crate::datastore::example_datastore::Tx;
 use crate::datastore::{tx_data::TxData, TxOffset};
 use omnipaxos::util::LogEntry as OmniLogEntry;
 use omnipaxos::{messages::Message, util::NodeId, OmniPaxos};
 use omnipaxos_storage::memory_storage::MemoryStorage;
 use omnipaxos::macros::Entry;
-use omnipaxos::storage::Entry;
-use omnipaxos_storage::persistent_storage::PersistentStorage;
-use omnipaxos::storage::Snapshot;
-use omnipaxos::storage::NoSnapshot;
 
 #[derive(Debug, Clone, Entry)]
 struct LogEntry{
@@ -21,7 +16,7 @@ struct LogEntry{
 /// OmniPaxosDurability is a OmniPaxos node that should provide the replicated
 /// implementation of the DurabilityLayer trait required by the Datastore.
 pub struct OmniPaxosDurability {
-    omni_paxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>
+    pub omni_paxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>
 }
 
 impl DurabilityLayer for OmniPaxosDurability {
