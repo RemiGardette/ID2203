@@ -86,7 +86,12 @@ impl Node {
         &mut self,
         tx: <ExampleDatastore as Datastore<String, String>>::MutTx,
     ) -> Result<TxResult, DatastoreError> {
-        todo!()
+        let leader_id = self.durability.lock().unwrap().omni_paxos.get_current_leader();
+        if leader_id == Some(self.node_id) {
+            self.datastore.commit_mut_tx(tx).map_err(|err| err.into())
+        } else {
+            Err(DatastoreError::NotLeader)
+        }   
     }
 
     fn advance_replicated_durability_offset(
