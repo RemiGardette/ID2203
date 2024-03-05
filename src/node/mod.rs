@@ -4,11 +4,22 @@ use crate::datastore::tx_data::TxResult;
 use crate::datastore::*;
 use crate::durability::omnipaxos_durability::OmniPaxosDurability;
 use crate::durability::{DurabilityLevel};
+use crate::durability::omnipaxos_durability::LogEntry as log_entry_durability;
+use std::time::Duration;
 use omnipaxos::messages::*;
 use omnipaxos::util::NodeId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+
+const BUFFER_SIZE: usize = 10000;
+const ELECTION_TICK_TIMEOUT: u64 = 5;
+const TICK_PERIOD: Duration = Duration::from_millis(10);
+const OUTGOING_MESSAGE_PERIOD: Duration = Duration::from_millis(1);
+const WAIT_LEADER_TIMEOUT: Duration = Duration::from_millis(500);
+const UI_TICK_PERIOD: Duration = Duration::from_millis(100);
+const BATCH_SIZE: u64 = 100;
+const BATCH_PERIOD: Duration = Duration::from_millis(50);
 
 pub struct NodeRunner {
     pub node: Arc<Mutex<Node>>,
@@ -40,7 +51,7 @@ impl Node {
             durability: Arc::new(Mutex::new(omni_durability)),
             datastore: ExampleDatastore::new(),
         }
-        node.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
+        // node.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
     }
 
     /// update who is the current leader. If a follower becomes the leader,
@@ -111,11 +122,13 @@ impl Node {
 /// A few helper functions to help structure your tests have been defined that you are welcome to use.
 #[cfg(test)]
 mod tests {
-    use crate::node::*;
+    use crate::{durability, node::*};
     use omnipaxos::messages::Message;
-    use omnipaxos::util::NodeId;
+    use omnipaxos::util::{LogEntry, NodeId};
+    use omnipaxos::{ClusterConfig, OmniPaxosConfig, ServerConfig};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
+    use omnipaxos_storage::memory_storage::MemoryStorage;
     use tokio::runtime::{Builder, Runtime};
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
@@ -124,10 +137,18 @@ mod tests {
 
     #[allow(clippy::type_complexity)]
     fn initialise_channels() -> (
-        HashMap<NodeId, mpsc::Sender<Message<_>>>,
-        HashMap<NodeId, mpsc::Receiver<Message<_>>>,
+        HashMap<NodeId, mpsc::Sender<Message<log_entry_durability>>>,
+        HashMap<NodeId, mpsc::Receiver<Message<log_entry_durability>>>,
     ) {
-        todo!()
+        // todo!()
+        let mut sender_channels = HashMap::new();
+        let mut receiver_channels = HashMap::new();
+        for pid in SERVERS {
+            let (sender, receiver) = mpsc::channel(100);
+            sender_channels.insert(pid, sender);
+            receiver_channels.insert(pid, receiver);
+        }
+        (sender_channels, receiver_channels)
     }
 
     fn create_runtime() -> Runtime {
@@ -142,8 +163,42 @@ mod tests {
         let mut nodes = HashMap::new();
         let (sender_channels, mut receiver_channels) = initialise_channels();
         for pid in SERVERS {
-            todo!("spawn the nodes")
+            // todo!("spawn the nodes")
+            let server_config = ServerConfig{
+                pid,
+                election_tick_timeout: ELECTION_TICK_TIMEOUT,
+                ..Default::default()
+            };
+            let cluster_config = ClusterConfig{
+                configuration_id: 1,
+                nodes: SERVERS.into(),
+                ..Default::default()
+            };
+            let op_config = OmniPaxosConfig {
+                server_config,
+                cluster_config,
+            };
+            let durability = OmniPaxosDurability::new(op_config.build(MemoryStorage::default()).unwrap());
+            let  node = Node::new(pid, durability);
+
+
         }
         nodes
     }
+
+    #[test]
+    //TestCase #1 Find the leader and commit a transaction. Show that the transaction is really *chosen* (according to our definition in Paxos) among the nodes
+    fn test_case_1() {
+        let mut runtime = create_runtime();
+        let nodes = spawn_nodes(&mut runtime);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let (first_server, _) = nodes.get(&1).unwrap();
+        // let leader = first_server
+        //     .lock()
+        //     .unwrap()
+        //     .get_current_leader()
+        //     .expect("Failed to get leader");
+        // println!("Elected leader: {}", leader);
+    }
+
 }
