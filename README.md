@@ -15,7 +15,7 @@ Run the DataStore in a replicated Manner
 - Application is a game where **the latency for committing transactions locally is critical and prioritized over consistency**
 
 ### Task
-- [ ] Implement OmniPaxosDurability struct provided in the skeleton code
+- [x] Implement OmniPaxosDurability struct provided in the skeleton code
 - [ ] Implement the Node struct using the provided Data Store and OmniPaxosDurability
 - [ ] Use an async runtime such as Tokio to spawn multiple instances of Node that together form the Datastore RSM running on OmniPaxos
 - [ ] Show that the system can pass the described test cases in the repository
