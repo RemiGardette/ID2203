@@ -206,8 +206,14 @@ mod tests {
             };
             let durability = OmniPaxosDurability::new(op_config.build(MemoryStorage::default()).unwrap());
             let  node = Node::new(pid, durability);
-
-
+            let (sender, receiver) = receiver_channels.remove(&pid).unwrap();
+            let node_runner = NodeRunner {
+                node: Arc::new(Mutex::new(node)),
+                incoming: receiver,
+                outgoing: sender_channels.clone(),
+            };
+            let handle = runtime.spawn(node_runner.run());
+            nodes.insert(pid, (node_runner.node, handle));
         }
         nodes
     }
