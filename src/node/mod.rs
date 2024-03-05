@@ -4,25 +4,52 @@ use crate::datastore::tx_data::TxResult;
 use crate::datastore::*;
 use crate::durability::omnipaxos_durability::OmniPaxosDurability;
 use crate::durability::{DurabilityLevel};
+use crate::durability::omnipaxos_durability::LogEntry;
 use omnipaxos::messages::*;
 use omnipaxos::util::NodeId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
+use std::time::Duration;
+use tokio::{sync::mpsc, time};
+pub const OUTGOING_MESSAGE_PERIOD: Duration = Duration::from_millis(1);
+pub const TICK_PERIOD: Duration = Duration::from_millis(10);
 
 pub struct NodeRunner {
     pub node: Arc<Mutex<Node>>,
-    // TODO Messaging and running
+    //Add the Messaging and running which is used for msging between the servers and for BLE
+    pub incoming: mpsc::Receiver<Message<LogEntry>>,
+    pub outgoing: HashMap<NodeId, mpsc::Sender<Message<LogEntry>>>,
 }
 
 impl NodeRunner {
     async fn send_outgoing_msgs(&mut self) {
-        todo!()
+        // let messages = self.omni_paxos.lock().unwrap().outgoing_messages();
+        let messages = self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.outgoing_messages();
+        for msg in messages {
+            let receiver = msg.get_receiver();
+            let channel = self
+                .outgoing
+                .get_mut(&receiver)
+                .expect("No channel for receiver");
+            let _ = channel.send(msg).await;
+        }
     }
 
     pub async fn run(&mut self) {
-        todo!()
+        let mut outgoing_interval = time::interval(OUTGOING_MESSAGE_PERIOD);
+        let mut tick_interval = time::interval(TICK_PERIOD);
+        loop {
+            tokio::select! {
+                biased;
+
+                _ = tick_interval.tick() => { self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.tick(); },
+                _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
+                Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.handle_incoming(in_msg); },
+                else => { }
+            }
+        }
     }
+    
 }
 
 type DurabilityLayer = Arc<Mutex<OmniPaxosDurability>>;
@@ -124,8 +151,8 @@ mod tests {
 
     #[allow(clippy::type_complexity)]
     fn initialise_channels() -> (
-        HashMap<NodeId, mpsc::Sender<Message<_>>>,
-        HashMap<NodeId, mpsc::Receiver<Message<_>>>,
+        HashMap<NodeId, mpsc::Sender<Message<LogEntry>>>,
+        HashMap<NodeId, mpsc::Receiver<Message<LogEntry>>>,
     ) {
         todo!()
     }
