@@ -7,6 +7,8 @@ use omnipaxos::ProposeErr;
 use omnipaxos::{messages::Message, util::NodeId, OmniPaxos};
 use omnipaxos_storage::memory_storage::MemoryStorage;
 use omnipaxos::macros::Entry;
+use crate::sequence_paxos::SequencePaxos; // Add the missing import statement
+use omnipaxos::ballot_leader_election::BallotLeaderElection; // Add the missing import statement
 
 #[derive(Debug, Clone, Entry)]
 pub struct LogEntry{
@@ -18,6 +20,19 @@ pub struct LogEntry{
 /// implementation of the DurabilityLayer trait required by the Datastore.
 pub struct OmniPaxosDurability {
     pub omni_paxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>
+}
+
+fn new() -> OmniPaxosDurability  {
+    // Create a new instance of OmniPaxos
+    let omnipaxos = OmniPaxos {
+        seq_paxos: SequencePaxos<T, B>,
+        ble: BallotLeaderElection,
+        election_clock: LogicalClock,
+        resend_message_clock: LogicalClock::new(OUTGOING_MESSAGE_PERIOD),
+    };
+    return OmniPaxosDurability {
+        omni_paxos: omnipaxos
+    }
 }
 
 impl DurabilityLayer for OmniPaxosDurability {

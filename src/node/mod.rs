@@ -69,12 +69,14 @@ pub struct Node {
 
 impl Node {
     pub fn new(node_id: NodeId, omni_durability: OmniPaxosDurability) -> Self {
-        Node {
+        self = Node {
             node_id,
             durability: omni_durability,
             datastore: ExampleDatastore::new(),
-        }
-        //self.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
+        };
+        self.durability.omni_paxos.set_node_id(node_id);
+        self.durability.omni_paxos.set_tick_period(TICK_PERIOD);
+        return self
     }
 
     /// update who is the current leader. If a follower becomes the leader,
