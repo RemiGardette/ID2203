@@ -172,11 +172,7 @@ mod tests {
     use tokio::runtime::{Builder, Runtime};
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
-<<<<<<< HEAD
-    use crate::durability::omnipaxos_durability::LogEntry; 
-=======
     use self::durability::omnipaxos_durability::LogEntry as OmniLogEntry;
->>>>>>> 375aa99d5eb7037a1983076f55c3d9b7ee392fe8
 
     const SERVERS: [NodeId; 3] = [1, 2, 3];
 
