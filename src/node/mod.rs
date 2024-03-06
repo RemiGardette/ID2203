@@ -171,13 +171,14 @@ mod tests {
     use tokio::runtime::{Builder, Runtime};
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
+    use self::durability::omnipaxos_durability::LogEntry as OmniLogEntry;
 
     const SERVERS: [NodeId; 3] = [1, 2, 3];
 
     #[allow(clippy::type_complexity)]
     fn initialise_channels() -> (
-        HashMap<NodeId, mpsc::Sender<Message<LogEntry>>>,
-        HashMap<NodeId, mpsc::Receiver<Message<LogEntry>>>,
+        HashMap<NodeId, mpsc::Sender<Message<LogEntry<OmniLogEntry>>>,
+        HashMap<NodeId, mpsc::Receiver<Message<LogEntry<OmniLogEntry>>>,
     ) {
         let mut sender_channels = HashMap::new();
         let mut receiver_channels = HashMap::new();
