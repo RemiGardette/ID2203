@@ -2,13 +2,17 @@ use self::example_durability::ExampleDurabilityLayer;
 
 use super::*;
 use crate::datastore::{tx_data::TxData, TxOffset};
+use omnipaxos::errors::ConfigError;
 use omnipaxos::util::LogEntry as OmniLogEntry;
 use omnipaxos::ProposeErr;
 use omnipaxos::{messages::Message, util::NodeId, OmniPaxos};
 use omnipaxos_storage::memory_storage::MemoryStorage;
 use omnipaxos::macros::Entry;
-use crate::sequence_paxos::SequencePaxos; // Add the missing import statement
-use omnipaxos::ballot_leader_election::BallotLeaderElection; // Add the missing import statement
+use omnipaxos::ClusterConfig;
+use omnipaxos::ServerConfig;
+
+
+
 
 #[derive(Debug, Clone, Entry)]
 pub struct LogEntry{
@@ -22,16 +26,25 @@ pub struct OmniPaxosDurability {
     pub omni_paxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>
 }
 
-fn new() -> OmniPaxosDurability  {
+fn new() -> Result<OmniPaxosDurability, ConfigError>  {
     // Create a new instance of OmniPaxos
-    let omnipaxos = OmniPaxos {
-        seq_paxos: SequencePaxos<T, B>,
-        ble: BallotLeaderElection,
-        election_clock: LogicalClock,
-        resend_message_clock: LogicalClock::new(OUTGOING_MESSAGE_PERIOD),
-    };
-    return OmniPaxosDurability {
-        omni_paxos: omnipaxos
+    let ClusterConfig = ClusterConfig::default();
+    let test = ClusterConfig.build_for_server::<LogEntry, MemoryStorage<LogEntry>>(
+        ServerConfig::default(),
+        MemoryStorage::default(),
+    );
+    match test {
+        Ok(test) => {
+            // OmniPaxos instance created successfully, use it here
+            return Ok(OmniPaxosDurability {
+                omni_paxos: test
+            });
+        }
+        Err(err) => {
+            // Handle the ConfigError here
+            println!("Error creating OmniPaxos instance: {:?}", err);
+            return Err(err);
+        }
     }
 }
 
