@@ -9,7 +9,7 @@ use omnipaxos_storage::memory_storage::MemoryStorage;
 use omnipaxos::macros::Entry;
 
 #[derive(Debug, Clone, Entry)]
-struct LogEntry{
+pub struct LogEntry{
     tx_offset: TxOffset,
     tx_data: TxData,
 }
