@@ -26,11 +26,11 @@ pub struct OmniPaxosDurability {
     pub omni_paxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>
 }
 
-fn new() -> Result<OmniPaxosDurability, ConfigError>  {
+fn new(server_config:ServerConfig) -> Result<OmniPaxosDurability, ConfigError>  {
     // Create a new instance of OmniPaxos
-    let ClusterConfig = ClusterConfig::default();
-    let test = ClusterConfig.build_for_server::<LogEntry, MemoryStorage<LogEntry>>(
-        ServerConfig::default(),
+    let cluster_config = ClusterConfig::default();
+    let test = cluster_config.build_for_server::<LogEntry, MemoryStorage<LogEntry>>(
+        server_config,
         MemoryStorage::default(),
     );
     match test {
