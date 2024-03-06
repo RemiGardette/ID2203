@@ -3,26 +3,67 @@ use crate::datastore::example_datastore::ExampleDatastore;
 use crate::datastore::tx_data::TxResult;
 use crate::datastore::*;
 use crate::durability::omnipaxos_durability::OmniPaxosDurability;
+<<<<<<< HEAD
 use crate::durability::{DurabilityLayer, DurabilityLevel};
+=======
+use crate::durability::{DurabilityLevel};
+use std::time::Duration;
+use crate::durability::omnipaxos_durability::LogEntry;
+>>>>>>> 428ac77d70f8ac190fac29e068cc2eb2051d91d9
 use omnipaxos::messages::*;
 use omnipaxos::util::NodeId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
+use std::time::Duration;
+use tokio::{sync::mpsc, time};
+pub const OUTGOING_MESSAGE_PERIOD: Duration = Duration::from_millis(1);
+pub const TICK_PERIOD: Duration = Duration::from_millis(10);
+
+const BUFFER_SIZE: usize = 10000;
+const ELECTION_TICK_TIMEOUT: u64 = 5;
+const TICK_PERIOD: Duration = Duration::from_millis(10);
+const OUTGOING_MESSAGE_PERIOD: Duration = Duration::from_millis(1);
+const WAIT_LEADER_TIMEOUT: Duration = Duration::from_millis(500);
+const UI_TICK_PERIOD: Duration = Duration::from_millis(100);
+const BATCH_SIZE: u64 = 100;
+const BATCH_PERIOD: Duration = Duration::from_millis(50);
 
 pub struct NodeRunner {
     pub node: Arc<Mutex<Node>>,
-    // TODO Messaging and running
+    //Add the Messaging and running which is used for msging between the servers and for BLE
+    pub incoming: mpsc::Receiver<Message<LogEntry>>,
+    pub outgoing: HashMap<NodeId, mpsc::Sender<Message<LogEntry>>>,
 }
 
 impl NodeRunner {
     async fn send_outgoing_msgs(&mut self) {
-        todo!()
+        // let messages = self.omni_paxos.lock().unwrap().outgoing_messages();
+        let messages = self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.outgoing_messages();
+        for msg in messages {
+            let receiver = msg.get_receiver();
+            let channel = self
+                .outgoing
+                .get_mut(&receiver)
+                .expect("No channel for receiver");
+            let _ = channel.send(msg).await;
+        }
     }
 
     pub async fn run(&mut self) {
-        todo!()
+        let mut outgoing_interval = time::interval(OUTGOING_MESSAGE_PERIOD);
+        let mut tick_interval = time::interval(TICK_PERIOD);
+        loop {
+            tokio::select! {
+                biased;
+
+                _ = tick_interval.tick() => { self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.tick(); },
+                _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
+                Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.handle_incoming(in_msg); },
+                else => { }
+            }
+        }
     }
+    
 }
 
 pub struct Node {
@@ -38,6 +79,10 @@ impl Node {
             durability: omni_durability,
             datastore: ExampleDatastore::new(),
         }
+<<<<<<< HEAD
+=======
+        // node.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
+>>>>>>> 428ac77d70f8ac190fac29e068cc2eb2051d91d9
     }
 
     /// update who is the current leader. If a follower becomes the leader,
@@ -123,11 +168,13 @@ impl Node {
 /// A few helper functions to help structure your tests have been defined that you are welcome to use.
 #[cfg(test)]
 mod tests {
-    use crate::node::*;
+    use crate::{durability, node::*};
     use omnipaxos::messages::Message;
-    use omnipaxos::util::NodeId;
+    use omnipaxos::util::{LogEntry, NodeId};
+    use omnipaxos::{ClusterConfig, OmniPaxosConfig, ServerConfig};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
+    use omnipaxos_storage::memory_storage::MemoryStorage;
     use tokio::runtime::{Builder, Runtime};
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
@@ -136,11 +183,24 @@ mod tests {
 
     /*#[allow(clippy::type_complexity)]
     fn initialise_channels() -> (
-        HashMap<NodeId, mpsc::Sender<Message<_>>>,
-        HashMap<NodeId, mpsc::Receiver<Message<_>>>,
+        HashMap<NodeId, mpsc::Sender<Message<LogEntry>>>,
+        HashMap<NodeId, mpsc::Receiver<Message<LogEntry>>>,
     ) {
+<<<<<<< HEAD
         todo!()
     }*/
+=======
+        // todo!()
+        let mut sender_channels = HashMap::new();
+        let mut receiver_channels = HashMap::new();
+        for pid in SERVERS {
+            let (sender, receiver) = mpsc::channel(100);
+            sender_channels.insert(pid, sender);
+            receiver_channels.insert(pid, receiver);
+        }
+        (sender_channels, receiver_channels)
+    }
+>>>>>>> 428ac77d70f8ac190fac29e068cc2eb2051d91d9
 
     fn create_runtime() -> Runtime {
         Builder::new_multi_thread()
@@ -154,8 +214,48 @@ mod tests {
         let mut nodes = HashMap::new();
         //let (sender_channels, mut receiver_channels) = initialise_channels();
         for pid in SERVERS {
-            todo!("spawn the nodes")
+            // todo!("spawn the nodes")
+            let server_config = ServerConfig{
+                pid,
+                election_tick_timeout: ELECTION_TICK_TIMEOUT,
+                ..Default::default()
+            };
+            let cluster_config = ClusterConfig{
+                configuration_id: 1,
+                nodes: SERVERS.into(),
+                ..Default::default()
+            };
+            let op_config = OmniPaxosConfig {
+                server_config,
+                cluster_config,
+            };
+            let durability = OmniPaxosDurability::new(op_config.build(MemoryStorage::default()).unwrap());
+            let  node = Node::new(pid, durability);
+            let (sender, receiver) = receiver_channels.remove(&pid).unwrap();
+            let node_runner = NodeRunner {
+                node: Arc::new(Mutex::new(node)),
+                incoming: receiver,
+                outgoing: sender_channels.clone(),
+            };
+            let handle = runtime.spawn(node_runner.run());
+            nodes.insert(pid, (node_runner.node, handle));
         }
         nodes
     }
+
+    #[test]
+    //TestCase #1 Find the leader and commit a transaction. Show that the transaction is really *chosen* (according to our definition in Paxos) among the nodes
+    fn test_case_1() {
+        let mut runtime = create_runtime();
+        let nodes = spawn_nodes(&mut runtime);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let (first_server, _) = nodes.get(&1).unwrap();
+        // let leader = first_server
+        //     .lock()
+        //     .unwrap()
+        //     .get_current_leader()
+        //     .expect("Failed to get leader");
+        // println!("Elected leader: {}", leader);
+    }
+
 }
