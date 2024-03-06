@@ -26,23 +26,25 @@ pub struct OmniPaxosDurability {
     pub omni_paxos: OmniPaxos<Log, MemoryStorage<Log>>
 }
 
-fn new(server_config:ServerConfig,cluster_config:ClusterConfig) -> Result<OmniPaxosDurability, ConfigError>  {
-    // Create a new instance of OmniPaxos
-    let test = cluster_config.build_for_server::<Log, MemoryStorage<Log>>(
-        server_config,
-        MemoryStorage::default(),
-    );
-    match test {
-        Ok(test) => {
-            // OmniPaxos instance created successfully, use it here
-            return Ok(OmniPaxosDurability {
-                omni_paxos: test
-            });
-        }
-        Err(err) => {
-            // Handle the ConfigError here
-            println!("Error creating OmniPaxos instance: {:?}", err);
-            return Err(err);
+impl OmniPaxosDurability {
+    pub fn new(server_config:ServerConfig,cluster_config:ClusterConfig) -> Result<OmniPaxosDurability, ConfigError>  {
+        // Create a new instance of OmniPaxos
+        let test = cluster_config.build_for_server::<Log, MemoryStorage<Log>>(
+            server_config,
+            MemoryStorage::default(),
+        );
+        match test {
+            Ok(test) => {
+                // OmniPaxos instance created successfully, use it here
+                return Ok(OmniPaxosDurability {
+                    omni_paxos: test
+                });
+            }
+            Err(err) => {
+                // Handle the ConfigError here
+                println!("Error creating OmniPaxos instance: {:?}", err);
+                return Err(err);
+            }
         }
     }
 }
