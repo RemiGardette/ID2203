@@ -50,7 +50,6 @@ impl NodeRunner {
         loop {
             tokio::select! {
                 biased;
-
                 _ = tick_interval.tick() => { self.node.lock().unwrap().durability.omni_paxos.tick(); },
                 _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
                 Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg); },
@@ -165,7 +164,7 @@ impl Node {
 mod tests {
     use crate::{durability, node::*};
     use omnipaxos::messages::Message;
-    use omnipaxos::util::{LogEntry, NodeId};
+    use omnipaxos::util::{NodeId};
     use omnipaxos::{ClusterConfig, OmniPaxosConfig, ServerConfig};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
@@ -202,7 +201,7 @@ mod tests {
 
     fn spawn_nodes(runtime: &mut Runtime) -> HashMap<NodeId, (Arc<Mutex<Node>>, JoinHandle<()>)> {
         let mut nodes = HashMap::new();
-        //let (sender_channels, mut receiver_channels) = initialise_channels();
+        let (sender_channels, mut receiver_channels) = initialise_channels();
         for pid in SERVERS {
             // todo!("spawn the nodes")
             let server_config = ServerConfig{
@@ -221,14 +220,17 @@ mod tests {
             };
             let durability = OmniPaxosDurability::new(op_config.build(MemoryStorage::default()).unwrap());
             let  node = Node::new(pid, durability);
-            let (sender, receiver) = receiver_channels.remove(&pid).unwrap();
-            let node_runner = NodeRunner {
+            let mut node_runner = NodeRunner {
                 node: Arc::new(Mutex::new(node)),
-                incoming: receiver,
+                incoming: receiver_channels.remove(&pid).unwrap(),
                 outgoing: sender_channels.clone(),
             };
-            let handle = runtime.spawn(node_runner.run());
-            nodes.insert(pid, (node_runner.node, handle));
+            let join_handle = runtime.spawn({
+                async move {
+                    node_runner.run().await;
+                }
+            });
+            nodes.insert(pid, (node_runner.node.clone() , join_handle));
         }
         nodes
     }
