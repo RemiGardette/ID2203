@@ -55,6 +55,8 @@ impl NodeRunner {
                 Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg); },
                 else => { }
             }
+            let mut node = self.node.lock().unwrap();
+            node.update_leader();
         }
     }
     
@@ -230,8 +232,75 @@ mod tests {
     }
 
     #[test]
+    fn basic_test_cluster_size() {
+        let mut runtime = create_runtime();
+        let nodes = spawn_nodes(&mut runtime);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        assert_eq!(SERVERS.len(), nodes.len());
+    }
+
+    #[test]
     //TestCase #1 Find the leader and commit a transaction. Show that the transaction is really *chosen* (according to our definition in Paxos) among the nodes
     fn test_case_1() {
+        let mut runtime = create_runtime();
+        let nodes = spawn_nodes(&mut runtime);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let (first_server, _) = nodes.get(&1).unwrap();
+        let leader_pid = first_server
+             .lock()
+             .unwrap()
+             .durability.omni_paxos
+             .get_current_leader()
+             .expect("Failed to get leader");
+        
+         println!("Elected leader: {}", leader_pid);
+         println!("Current Offset: {}", first_server.lock().unwrap().durability.get_durable_tx_offset().0);
+
+        let leader = nodes.get(&leader_pid).unwrap();
+        let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
+        leader.0.lock().unwrap().datastore.set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
+        let transaction = leader.0.lock().unwrap().commit_mut_tx(tx).unwrap();
+        leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
+        // After committing the transaction, check the leader status
+        std::thread::sleep(TICK_PERIOD);
+        let leader_iter = leader.0.lock().unwrap().durability.iter();
+        let leader_offset = leader.0.lock().unwrap().durability.get_durable_tx_offset();
+        let leader_collected: Vec<_> = leader_iter.collect();
+        //check that follower nodes are in sync with the leader
+        for pid in SERVERS {
+            let (server, _) = nodes.get(&pid).unwrap();
+            if server.lock().unwrap().node_id != leader_pid {
+                let iter = server.lock().unwrap().durability.iter();
+                let collected: Vec<_> = iter.collect();
+                assert_eq!(collected.len(), leader_collected.len());
+                assert_eq!(leader_offset, server.lock().unwrap().durability.get_durable_tx_offset());
+            }
+            
+        }
+    }
+    
+
+    #[test]
+    /// 2. Find the leader and commit a transaction. Kill the leader and show that another node will be elected and that the replicated state is still correct.
+    fn test_case_2() {
+        let mut runtime = create_runtime();
+        let nodes = spawn_nodes(&mut runtime);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let (first_server, _) = nodes.get(&1).unwrap();
+        let leader = first_server
+             .lock()
+             .unwrap()
+             .durability.omni_paxos
+             .get_current_leader()
+             .expect("Failed to get leader");
+         println!("Elected leader: {}", leader);
+         let (second_server, _) = nodes.get(&leader).unwrap();
+         let second_server_pid = second_server.lock().unwrap().node_id;
+         println!("Leader: {}", second_server_pid);
+         
+    }
+
+    fn test_case_3() {
         let mut runtime = create_runtime();
         let nodes = spawn_nodes(&mut runtime);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
@@ -243,5 +312,21 @@ mod tests {
         //     .expect("Failed to get leader");
         // println!("Elected leader: {}", leader);
     }
+
+    fn test_case_4() {
+        let mut runtime = create_runtime();
+        let nodes = spawn_nodes(&mut runtime);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let (first_server, _) = nodes.get(&1).unwrap();
+        // let leader = first_server
+        //     .lock()
+        //     .unwrap()
+        //     .get_current_leader()
+        //     .expect("Failed to get leader");
+        // println!("Elected leader: {}", leader);
+    }
+
+
+
 
 }
