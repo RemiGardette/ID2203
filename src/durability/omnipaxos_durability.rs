@@ -20,6 +20,12 @@ pub struct OmniPaxosDurability {
     pub omni_paxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>
 }
 
+impl OmniPaxosDurability {
+    pub fn new(omnipaxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>) -> Self {
+        OmniPaxosDurability { omni_paxos: omnipaxos}
+    }
+}
+
 impl DurabilityLayer for OmniPaxosDurability {
 
     //We read all the entries from the omnipaxos log and return an iterator over them
