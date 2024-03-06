@@ -15,7 +15,7 @@ use omnipaxos::ServerConfig;
 
 
 #[derive(Debug, Clone, Entry)]
-pub struct LogEntry{
+pub struct Log{
     tx_offset: TxOffset,
     tx_data: TxData,
 }
@@ -23,13 +23,13 @@ pub struct LogEntry{
 /// OmniPaxosDurability is a OmniPaxos node that should provide the replicated
 /// implementation of the DurabilityLayer trait required by the Datastore.
 pub struct OmniPaxosDurability {
-    pub omni_paxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>
+    pub omni_paxos: OmniPaxos<Log, MemoryStorage<Log>>
 }
 
 fn new(server_config:ServerConfig) -> Result<OmniPaxosDurability, ConfigError>  {
     // Create a new instance of OmniPaxos
     let cluster_config = ClusterConfig::default();
-    let test = cluster_config.build_for_server::<LogEntry, MemoryStorage<LogEntry>>(
+    let test = cluster_config.build_for_server::<Log, MemoryStorage<Log>>(
         server_config,
         MemoryStorage::default(),
     );
@@ -94,7 +94,7 @@ impl DurabilityLayer for OmniPaxosDurability {
     }
 
     fn append_tx(&mut self, tx_offset: TxOffset, tx_data: TxData) {
-        let log = LogEntry {
+        let log = Log {
             tx_offset,
             tx_data,
         };
