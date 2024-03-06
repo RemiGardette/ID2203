@@ -22,11 +22,6 @@ pub struct OmniPaxosDurability {
     pub omni_paxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>
 }
 
-<<<<<<< HEAD
-impl OmniPaxosDurability {
-    pub fn new(omnipaxos: OmniPaxos<LogEntry, MemoryStorage<LogEntry>>) -> Self {
-        OmniPaxosDurability { omni_paxos: omnipaxos}
-=======
 fn new() -> OmniPaxosDurability  {
     // Create a new instance of OmniPaxos
     let omnipaxos = OmniPaxos {
@@ -37,7 +32,6 @@ fn new() -> OmniPaxosDurability  {
     };
     return OmniPaxosDurability {
         omni_paxos: omnipaxos
->>>>>>> 375aa99d5eb7037a1983076f55c3d9b7ee392fe8
     }
 }
 
