@@ -68,12 +68,14 @@ pub struct Node {
 
 impl Node {
     pub fn new(node_id: NodeId, omni_durability: OmniPaxosDurability) -> Self {
-        Node {
+        self = Node {
             node_id,
             durability: omni_durability,
             datastore: ExampleDatastore::new(),
-        }
-        //self.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
+        };
+        self.durability.omni_paxos.set_node_id(node_id);
+        self.durability.omni_paxos.set_tick_period(TICK_PERIOD);
+        return self
     }
 
     /// update who is the current leader. If a follower becomes the leader,
@@ -170,14 +172,18 @@ mod tests {
     use tokio::runtime::{Builder, Runtime};
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
+<<<<<<< HEAD
     use crate::durability::omnipaxos_durability::LogEntry; 
+=======
+    use self::durability::omnipaxos_durability::LogEntry as OmniLogEntry;
+>>>>>>> 375aa99d5eb7037a1983076f55c3d9b7ee392fe8
 
     const SERVERS: [NodeId; 3] = [1, 2, 3];
 
     #[allow(clippy::type_complexity)]
     fn initialise_channels() -> (
-        HashMap<NodeId, mpsc::Sender<Message<LogEntry>>>,
-        HashMap<NodeId, mpsc::Receiver<Message<LogEntry>>>,
+        HashMap<NodeId, mpsc::Sender<Message<LogEntry<OmniLogEntry>>>,
+        HashMap<NodeId, mpsc::Receiver<Message<LogEntry<OmniLogEntry>>>,
     ) {
         let mut sender_channels = HashMap::new();
         let mut receiver_channels = HashMap::new();
