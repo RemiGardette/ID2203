@@ -77,7 +77,7 @@ impl Node {
             durability: omni_durability,
             datastore: ExampleDatastore::new(),
         }
-        // node.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
+        self.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
     }
 
     /// update who is the current leader. If a follower becomes the leader,
