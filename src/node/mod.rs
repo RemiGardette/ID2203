@@ -212,14 +212,10 @@ mod tests {
                 nodes: SERVERS.into(),
                 ..Default::default()
             };
-            let op_config = OmniPaxosConfig {
-                server_config,
-                cluster_config,
-            };
-            let durability = OmniPaxosDurability::new(server_config, cluster_config).unwrap();
-            let  node = Node::new(pid, durability);
+            let durability = OmniPaxosDurability::new(server_config.clone(), cluster_config.clone()).unwrap();
+            let node: Arc<Mutex<Node>> = Arc::new(Mutex::new(Node::new(pid, durability)));
             let mut node_runner = NodeRunner {
-                node: Arc::new(Mutex::new(node)),
+                node: node.clone(),
                 incoming: receiver_channels.remove(&pid).unwrap(),
                 outgoing: sender_channels.clone(),
             };
@@ -228,7 +224,7 @@ mod tests {
                     node_runner.run().await;
                 }
             });
-            nodes.insert(pid, (node_runner.node.clone() , join_handle));
+            nodes.insert(pid, ( node, join_handle));
         }
         nodes
     }
