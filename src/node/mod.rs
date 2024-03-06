@@ -5,7 +5,7 @@ use crate::datastore::*;
 use crate::durability::omnipaxos_durability::OmniPaxosDurability;
 use crate::durability::{DurabilityLayer, DurabilityLevel};
 use std::time::Duration;
-use crate::durability::omnipaxos_durability::LogEntry;
+use crate::durability::omnipaxos_durability::Log;
 use omnipaxos::messages::*;
 use omnipaxos::util::NodeId;
 use std::collections::HashMap;
@@ -26,8 +26,8 @@ const BATCH_PERIOD: Duration = Duration::from_millis(50);
 pub struct NodeRunner {
     pub node: Arc<Mutex<Node>>,
     //Add the Messaging and running which is used for msging between the servers and for BLE
-    pub incoming: mpsc::Receiver<Message<LogEntry>>,
-    pub outgoing: HashMap<NodeId, mpsc::Sender<Message<LogEntry>>>,
+    pub incoming: mpsc::Receiver<Message<Log>>,
+    pub outgoing: HashMap<NodeId, mpsc::Sender<Message<Log>>>,
 }
 
 impl NodeRunner {
@@ -172,14 +172,14 @@ mod tests {
     use tokio::runtime::{Builder, Runtime};
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
-    use self::durability::omnipaxos_durability::LogEntry as OmniLogEntry;
+    use self::durability::omnipaxos_durability::Log as OmniLogEntry;
 
     const SERVERS: [NodeId; 3] = [1, 2, 3];
 
     #[allow(clippy::type_complexity)]
     fn initialise_channels() -> (
-        HashMap<NodeId, mpsc::Sender<Message<LogEntry<OmniLogEntry>>>,
-        HashMap<NodeId, mpsc::Receiver<Message<LogEntry<OmniLogEntry>>>,
+        HashMap<NodeId, mpsc::Sender<Message<Log<OmniLogEntry>>>,
+        HashMap<NodeId, mpsc::Receiver<Message<Log<OmniLogEntry>>>,
     ) {
         let mut sender_channels = HashMap::new();
         let mut receiver_channels = HashMap::new();
@@ -218,7 +218,7 @@ mod tests {
                 server_config,
                 cluster_config,
             };
-            let durability = OmniPaxosDurability::new(op_config.build(MemoryStorage::default()).unwrap());
+            let durability = OmniPaxosDurability::new(server_config, cluster_config).unwrap();
             let  node = Node::new(pid, durability);
             let mut node_runner = NodeRunner {
                 node: Arc::new(Mutex::new(node)),

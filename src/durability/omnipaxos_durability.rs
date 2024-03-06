@@ -3,7 +3,7 @@ use self::example_durability::ExampleDurabilityLayer;
 use super::*;
 use crate::datastore::{tx_data::TxData, TxOffset};
 use omnipaxos::errors::ConfigError;
-use omnipaxos::util::LogEntry as OmniLogEntry;
+use omnipaxos::util::LogEntry;
 use omnipaxos::ProposeErr;
 use omnipaxos::{messages::Message, util::NodeId, OmniPaxos};
 use omnipaxos_storage::memory_storage::MemoryStorage;
@@ -26,9 +26,8 @@ pub struct OmniPaxosDurability {
     pub omni_paxos: OmniPaxos<Log, MemoryStorage<Log>>
 }
 
-fn new(server_config:ServerConfig) -> Result<OmniPaxosDurability, ConfigError>  {
+fn new(server_config:ServerConfig,cluster_config:ClusterConfig) -> Result<OmniPaxosDurability, ConfigError>  {
     // Create a new instance of OmniPaxos
-    let cluster_config = ClusterConfig::default();
     let test = cluster_config.build_for_server::<Log, MemoryStorage<Log>>(
         server_config,
         MemoryStorage::default(),
@@ -56,7 +55,7 @@ impl DurabilityLayer for OmniPaxosDurability {
             let entry_iter = entries.iter().flat_map(|entry| {
                 match entry {
                     //We read both the decided logs and undecided logs, maybe this behaviour will need to be adjusted later
-                    OmniLogEntry::Decided(log) | OmniLogEntry::Undecided(log) => {
+                    LogEntry::Decided(log) | LogEntry::Undecided(log) => {
                         Some((log.tx_offset.clone(), log.tx_data.clone()))
                     }
                     _ => None,
@@ -77,7 +76,7 @@ impl DurabilityLayer for OmniPaxosDurability {
             let entry_iter = entries.iter().filter_map(|entry| {
                 match entry {
                     //We read both the decided logs and undecided logs, maybe this behaviour will need to be adjusted later
-                    OmniLogEntry::Decided(log) | OmniLogEntry::Undecided(log) => {
+                    LogEntry::Decided(log) | LogEntry::Undecided(log) => {
                         if log.tx_offset >= offset {
                             Some((log.tx_offset.clone(), log.tx_data.clone()))
                         } else {
