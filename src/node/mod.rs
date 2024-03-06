@@ -10,12 +10,9 @@ use omnipaxos::messages::*;
 use omnipaxos::util::NodeId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::{sync::mpsc, time};
 
 use self::example_datastore::MutTx;
-pub const OUTGOING_MESSAGE_PERIOD: Duration = Duration::from_millis(1);
-pub const TICK_PERIOD: Duration = Duration::from_millis(10);
 
 const BUFFER_SIZE: usize = 10000;
 const ELECTION_TICK_TIMEOUT: u64 = 5;
@@ -36,7 +33,7 @@ pub struct NodeRunner {
 impl NodeRunner {
     async fn send_outgoing_msgs(&mut self) {
         // let messages = self.omni_paxos.lock().unwrap().outgoing_messages();
-        let messages = self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.outgoing_messages();
+        let messages = self.node.lock().unwrap().durability.omni_paxos.outgoing_messages();
         for msg in messages {
             let receiver = msg.get_receiver();
             let channel = self
@@ -54,9 +51,9 @@ impl NodeRunner {
             tokio::select! {
                 biased;
 
-                _ = tick_interval.tick() => { self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.tick(); },
+                _ = tick_interval.tick() => { self.node.lock().unwrap().durability.omni_paxos.tick(); },
                 _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
-                Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.lock().unwrap().omni_paxos.handle_incoming(in_msg); },
+                Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg); },
                 else => { }
             }
         }
