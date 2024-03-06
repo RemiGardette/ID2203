@@ -74,7 +74,7 @@ impl Node {
             durability: omni_durability,
             datastore: ExampleDatastore::new(),
         }
-        self.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
+        //self.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
     }
 
     /// update who is the current leader. If a follower becomes the leader,
@@ -96,7 +96,7 @@ impl Node {
     /// behavior in the Datastore as defined by the application.
     fn apply_replicated_txns(&mut self) {
         let currentTxOffset = self.durability.get_durable_tx_offset();
-        let txns = self.durability.iter_starting_from_offset(currentTxOffset);
+        let mut txns = self.durability.iter_starting_from_offset(currentTxOffset);
         while let Some((offset, tx_data)) = txns.next() {
             self.datastore.replay_transaction(&tx_data);
         }
