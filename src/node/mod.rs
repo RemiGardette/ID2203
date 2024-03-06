@@ -3,19 +3,17 @@ use crate::datastore::example_datastore::ExampleDatastore;
 use crate::datastore::tx_data::TxResult;
 use crate::datastore::*;
 use crate::durability::omnipaxos_durability::OmniPaxosDurability;
-<<<<<<< HEAD
 use crate::durability::{DurabilityLayer, DurabilityLevel};
-=======
-use crate::durability::{DurabilityLevel};
 use std::time::Duration;
 use crate::durability::omnipaxos_durability::LogEntry;
->>>>>>> 428ac77d70f8ac190fac29e068cc2eb2051d91d9
 use omnipaxos::messages::*;
 use omnipaxos::util::NodeId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::{sync::mpsc, time};
+
+use self::example_datastore::MutTx;
 pub const OUTGOING_MESSAGE_PERIOD: Duration = Duration::from_millis(1);
 pub const TICK_PERIOD: Duration = Duration::from_millis(10);
 
@@ -79,10 +77,7 @@ impl Node {
             durability: omni_durability,
             datastore: ExampleDatastore::new(),
         }
-<<<<<<< HEAD
-=======
         // node.durability.lock().unwrap().omni_paxos.set_node_id(node_id);
->>>>>>> 428ac77d70f8ac190fac29e068cc2eb2051d91d9
     }
 
     /// update who is the current leader. If a follower becomes the leader,
@@ -104,11 +99,12 @@ impl Node {
     /// behavior in the Datastore as defined by the application.
     fn apply_replicated_txns(&mut self) {
         let currentTxOffset = self.durability.get_durable_tx_offset();
-        let logs_to_replicate = self.durability.iter_starting_from_offset(currentTxOffset);
-        for log in logs_to_replicate{
-            self.datastore.apply_tx(tx.);
+        let txns = self.durability.iter_starting_from_offset(currentTxOffset);
+        while let Some((offset, tx_data)) = txns.next() {
+            self.datastore.replay_transaction(&tx_data);
         }
     }
+
 
     fn rollback_unreplicated_txns(&mut self) {
         self.datastore.rollback_to_replicated_durability_offset();
@@ -181,16 +177,11 @@ mod tests {
 
     const SERVERS: [NodeId; 3] = [1, 2, 3];
 
-    /*#[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity)]
     fn initialise_channels() -> (
         HashMap<NodeId, mpsc::Sender<Message<LogEntry>>>,
         HashMap<NodeId, mpsc::Receiver<Message<LogEntry>>>,
     ) {
-<<<<<<< HEAD
-        todo!()
-    }*/
-=======
-        // todo!()
         let mut sender_channels = HashMap::new();
         let mut receiver_channels = HashMap::new();
         for pid in SERVERS {
@@ -200,7 +191,6 @@ mod tests {
         }
         (sender_channels, receiver_channels)
     }
->>>>>>> 428ac77d70f8ac190fac29e068cc2eb2051d91d9
 
     fn create_runtime() -> Runtime {
         Builder::new_multi_thread()
