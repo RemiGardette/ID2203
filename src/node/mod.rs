@@ -287,17 +287,45 @@ mod tests {
         let nodes = spawn_nodes(&mut runtime);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
         let (first_server, _) = nodes.get(&1).unwrap();
-        let leader = first_server
+        let leader_pid = first_server
              .lock()
              .unwrap()
              .durability.omni_paxos
              .get_current_leader()
              .expect("Failed to get leader");
-         println!("Elected leader: {}", leader);
-         let (second_server, _) = nodes.get(&leader).unwrap();
-         let second_server_pid = second_server.lock().unwrap().node_id;
-         println!("Leader: {}", second_server_pid);
-         
+        
+         println!("Elected leader: {}", leader_pid);
+         println!("Current Offset: {}", first_server.lock().unwrap().durability.get_durable_tx_offset().0);
+
+        let leader = nodes.get(&leader_pid).unwrap();
+        let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
+        leader.0.lock().unwrap().datastore.set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
+        let transaction = leader.0.lock().unwrap().commit_mut_tx(tx).unwrap();
+        leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
+        // After committing the transaction, check the leader status
+        std::thread::sleep(TICK_PERIOD);
+        let leader_iter = leader.0.lock().unwrap().durability.iter();
+        let leader_offset = leader.0.lock().unwrap().durability.get_durable_tx_offset();
+        let leader_collected: Vec<_> = leader_iter.collect();
+        leader.1.abort();
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let (second, _) = nodes.get(&2).unwrap();
+        let new_leader = second
+             .lock()
+             .unwrap()
+             .durability.omni_paxos
+             .get_current_leader()
+             .expect("Failed to get leader");
+        assert_ne!(leader_pid, new_leader);
+        println!("New leader: {}", new_leader);
+        let new_leader_offset = second.lock().unwrap().durability.get_durable_tx_offset();
+        let new_leader_iter = second.lock().unwrap().durability.iter();
+        let new_leader_collected: Vec<_> = new_leader_iter.collect();
+        // print the collected 
+        println!("Leader Collected: {:?}", leader_collected);
+        println!("Leader Collected: {:?}", new_leader_collected);
+        assert_eq!(leader_collected.len(), new_leader_collected.len());
+
     }
 
     fn test_case_3() {
