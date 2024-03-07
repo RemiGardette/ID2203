@@ -394,6 +394,42 @@ mod tests {
         let nodes = spawn_nodes(&mut runtime);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
         let (first_server, _) = nodes.get(&1).unwrap();
+        let leader_pid = first_server
+             .lock()
+             .unwrap()
+             .durability.omni_paxos
+             .get_current_leader()
+             .expect("Failed to get leader");
+        
+         println!("Elected leader: {}", leader_pid);
+         println!("Current Offset: {}", first_server.lock().unwrap().durability.get_durable_tx_offset().0);
+
+
+        let leader = nodes.get(&leader_pid).unwrap();
+        let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
+        leader.0.lock().unwrap().datastore.set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
+        let transaction = leader.0.lock().unwrap().commit_mut_tx(tx).unwrap();
+        leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let leader_first_commit_len = leader.0.lock().unwrap().datastore.get_cur_offset();
+        println!("Current length of the iter is {:?} before DC", leader_first_commit_len.unwrap().0.to_le());
+        // After committing the transaction, check the leader status
+        leader.0.lock().unwrap().messaging_allowed = false;
+        let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
+        leader.0.lock().unwrap().datastore.set_mut_tx(&mut tx, "key2".to_string(), "value2".to_string());
+        let transaction = leader.0.lock().unwrap().commit_mut_tx(tx).unwrap();
+        let leader_second_commit_len= leader.0.lock().unwrap().datastore.get_cur_offset();,
+        println!("Current length of the iter is {:?} after disconnect", leader_second_commit_len.unwrap().0.to_le());
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let leader_first_check = leader.0.lock().unwrap().datastore.get_cur_offset();
+        println!("Current length of the iter is {:?} after timeout", leader_first_check.unwrap().0.to_le());
+
+
+
+
+
+
+
     }
 
     #[test]
