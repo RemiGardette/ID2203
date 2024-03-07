@@ -29,15 +29,15 @@ pub struct OmniPaxosDurability {
 impl OmniPaxosDurability {
     pub fn new(server_config:ServerConfig,cluster_config:ClusterConfig) -> Result<OmniPaxosDurability, ConfigError>  {
         // Create a new instance of OmniPaxos
-        let test = cluster_config.build_for_server::<Log, MemoryStorage<Log>>(
+        let cluster_config = cluster_config.build_for_server::<Log, MemoryStorage<Log>>(
             server_config,
             MemoryStorage::default(),
         );
-        match test {
-            Ok(test) => {
+        match cluster_config {
+            Ok(cluster_config) => {
                 // OmniPaxos instance created successfully, use it here
                 return Ok(OmniPaxosDurability {
-                    omni_paxos: test
+                    omni_paxos: cluster_config
                 });
             }
             Err(err) => {
