@@ -71,7 +71,6 @@ impl NodeRunner {
                     // We update the datastore on every follower node at a regular interval, to avoid having to catch up on too much content at once when the leader changes
                     let current_leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
                     if current_leader_pid != Some(self.node.lock().unwrap().node_id) {
-                        self.node.lock().unwrap().advance_replicated_durability_offset().unwrap();
                         self.node.lock().unwrap().apply_replicated_txns();
                     }
                 },
@@ -110,10 +109,8 @@ impl Node {
     pub fn update_leader(&mut self) {
         let leader_id = self.durability.omni_paxos.get_current_leader();
         if leader_id == Some(self.node_id) {
-            self.advance_replicated_durability_offset().unwrap();
             self.apply_replicated_txns();
         } else {
-            self.advance_replicated_durability_offset().unwrap();
             self.rollback_unreplicated_txns();
         }
     }
@@ -123,6 +120,7 @@ impl Node {
     /// We need to be careful with which nodes should do this according to desired
     /// behavior in the Datastore as defined by the application.
     fn apply_replicated_txns(&mut self) {
+        self.advance_replicated_durability_offset().unwrap();
         let currentTxOffset = self.durability.get_durable_tx_offset();
         let mut txns = self.durability.iter_starting_from_offset(currentTxOffset);
         while let Some((offset, tx_data)) = txns.next() {
@@ -132,6 +130,7 @@ impl Node {
 
 
     fn rollback_unreplicated_txns(&mut self) {
+        self.advance_replicated_durability_offset().unwrap();
         self.datastore.rollback_to_replicated_durability_offset();
     }
 
