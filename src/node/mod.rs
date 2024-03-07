@@ -22,6 +22,7 @@ const WAIT_LEADER_TIMEOUT: Duration = Duration::from_millis(500);
 const UI_TICK_PERIOD: Duration = Duration::from_millis(100);
 const BATCH_SIZE: u64 = 100;
 const BATCH_PERIOD: Duration = Duration::from_millis(50);
+const DATASTORE_CATCHUP_PERIOD: Duration = Duration::from_millis(10000);
 
 pub struct NodeRunner {
     pub node: Arc<Mutex<Node>>,
@@ -47,11 +48,13 @@ impl NodeRunner {
     pub async fn run(&mut self) {
         let mut outgoing_interval = time::interval(OUTGOING_MESSAGE_PERIOD);
         let mut tick_interval = time::interval(TICK_PERIOD);
+        let mut datastore_update_interval = time::interval(DATASTORE_CATCHUP_PERIOD);
         loop {
             tokio::select! {
                 biased;
                 _ = tick_interval.tick() => { self.node.lock().unwrap().durability.omni_paxos.tick(); },
                 _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
+                _ = datastore_update_interval.tick() => { self.node.lock().unwrap().apply_replicated_txns();},
                 Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg); },
                 else => { }
             }
@@ -85,8 +88,10 @@ impl Node {
     pub fn update_leader(&mut self) {
         let leader_id = self.durability.omni_paxos.get_current_leader();
         if leader_id == Some(self.node_id) {
+            self.advance_replicated_durability_offset().unwrap();
             self.apply_replicated_txns();
         } else {
+            self.advance_replicated_durability_offset().unwrap();
             self.rollback_unreplicated_txns();
         }
     }
@@ -252,9 +257,6 @@ mod tests {
              .durability.omni_paxos
              .get_current_leader()
              .expect("Failed to get leader");
-        
-         println!("Elected leader: {}", leader_pid);
-         println!("Current Offset: {}", first_server.lock().unwrap().durability.get_durable_tx_offset().0);
 
         let leader = nodes.get(&leader_pid).unwrap();
         let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
@@ -275,7 +277,9 @@ mod tests {
                 assert_eq!(collected.len(), leader_collected.len());
                 assert_eq!(leader_offset, server.lock().unwrap().durability.get_durable_tx_offset());
             }
-            
+        
+        //Here we will assert that a node which is not a leader cannot commit
+
         }
     }
     
@@ -300,6 +304,9 @@ mod tests {
          
     }
 
+    #[test]
+    /// 3. Find the leader and commit a transaction. Disconnect the leader from the other nodes and continue to commit transactions before the OmniPaxos election timeout.
+    /// Verify that the transaction was first committed in memory but later rolled back.
     fn test_case_3() {
         let mut runtime = create_runtime();
         let nodes = spawn_nodes(&mut runtime);
@@ -313,6 +320,8 @@ mod tests {
         // println!("Elected leader: {}", leader);
     }
 
+    #[test]
+    /// 4. Simulate the 3 partial connectivity scenarios from the OmniPaxos liveness lecture. Does the system recover? *NOTE* for this test you may need to modify the messaging logic.
     fn test_case_4() {
         let mut runtime = create_runtime();
         let nodes = spawn_nodes(&mut runtime);
