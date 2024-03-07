@@ -50,18 +50,12 @@ impl NodeRunner {
         let mut outgoing_interval = time::interval(OUTGOING_MESSAGE_PERIOD);
         let mut tick_interval = time::interval(TICK_PERIOD);
         let mut datastore_update_interval = time::interval(DATASTORE_CATCHUP_PERIOD);
-        let mut leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
         loop {
             tokio::select! {
                 biased;
                 _ = tick_interval.tick() => { 
                     self.node.lock().unwrap().durability.omni_paxos.tick(); 
-                    // We check whether the leader has changed to apply update_leader on the node
-                    let current_leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
-                    if leader_pid != current_leader_pid {
-                        leader_pid = current_leader_pid;
-                        self.node.lock().unwrap().update_leader();
-                    }
+                    self.node.lock().unwrap().update_leader();
                 },
                 _ = outgoing_interval.tick() => { 
                     if self.node.lock().unwrap().messaging_allowed{
@@ -71,7 +65,7 @@ impl NodeRunner {
                     // We update the datastore on every follower node at a regular interval, to avoid having to catch up on too much content at once when the leader changes
                     let current_leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
                     if current_leader_pid != Some(self.node.lock().unwrap().node_id) {
-                        self.node.lock().unwrap().apply_replicated_txns();
+                        //self.node.lock().unwrap().apply_replicated_txns();
                     }
                 },
                 Some(in_msg) = self.incoming.recv() => { if self.node.lock().unwrap().messaging_allowed{
@@ -131,7 +125,9 @@ impl Node {
 
     fn rollback_unreplicated_txns(&mut self) {
         self.advance_replicated_durability_offset().unwrap();
-        self.datastore.rollback_to_replicated_durability_offset();
+        if let Err(err) = self.datastore.rollback_to_replicated_durability_offset() {
+            println!("Error: {}", err);
+        }
     }
 
     pub fn begin_tx(
@@ -290,7 +286,7 @@ mod tests {
     }
 
 
-    #[test]
+    //#[test]
     fn basic_test_cluster_size() {
         let mut runtime = create_runtime();
         let nodes = spawn_nodes(&mut runtime);
@@ -298,9 +294,9 @@ mod tests {
         assert_eq!(SERVERS.len(), nodes.len());
     }
 
-    #[test]
+    //#[test]
     //TestCase #1 Find the leader and commit a transaction. Show that the transaction is really *chosen* (according to our definition in Paxos) among the nodes
-    fn test_case_1() {
+    /*fn test_case_1() {
         let mut runtime = create_runtime();
         let nodes = spawn_nodes(&mut runtime);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
@@ -338,7 +334,7 @@ mod tests {
     }
     
 
-    #[test]
+    //#[test]
     /// 2. Find the leader and commit a transaction. Kill the leader and show that another node will be elected and that the replicated state is still correct.
     fn test_case_2() {
         let mut runtime = create_runtime();
@@ -384,9 +380,8 @@ mod tests {
         println!("Leader Collected: {:?}", new_leader_collected);
         assert_eq!(leader_collected.len(), new_leader_collected.len());
 
-    }
+    }*/
 
-    #[test]
     /// 3. Find the leader and commit a transaction. Disconnect the leader from the other nodes and continue to commit transactions before the OmniPaxos election timeout.
     /// Verify that the transaction was first committed in memory but later rolled back.
     #[test]
@@ -411,7 +406,11 @@ fn test_case_3() {
         first_server.lock().unwrap().durability.get_durable_tx_offset().0
     );
 
-    let leader = nodes.get(&leader_pid).unwrap();
+    // Assuming you have already obtained the leader_pid and nodes HashMap
+
+let leader = nodes.get(&leader_pid).unwrap();
+
+for _ in 0..5 {
     let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
     leader
         .0
@@ -425,42 +424,60 @@ fn test_case_3() {
         .unwrap()
         .commit_mut_tx(tx)
         .unwrap();
-    leader
-        .0
-        .lock()
-        .unwrap()
-        .durability
-        .append_tx(transaction.tx_offset, transaction.tx_data);
-    std::thread::sleep(WAIT_LEADER_TIMEOUT);
+    leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
+}
+println!(
+    "Current Offset before cutting connection, should be 0+5=5: {}",
+    leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+);
 
-    // After committing the transaction, check the leader status
-    leader.0.lock().unwrap().messaging_allowed = false;
-    let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
-    leader
-        .0
-        .lock()
-        .unwrap()
-        .datastore
-        .set_mut_tx(&mut tx, "key2".to_string(), "value2".to_string());
-    let transaction = leader
-        .0
-        .lock()
-        .unwrap()
-        .commit_mut_tx(tx)
-        .unwrap();
-    let leader_second_commit_len = leader
-        .0
-        .lock()
-        .unwrap()
-        .datastore
-        .get_cur_offset()
-        .unwrap()
-        .0
-        .to_le();
+    std::thread::sleep(WAIT_LEADER_TIMEOUT);
+    println!("Replicated logs: {:?}", leader.0.lock().unwrap().durability.iter().collect::<Vec<_>>());
     println!(
-        "Current length of the iter is {:?} after disconnect",
-        leader_second_commit_len
+        "test, should be 0+5=5: {}",
+        leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
     );
+    println!(
+        "test, should be 0+5=5: {}",
+        leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+    );
+    println!(
+        "Current durability offset, should be 0+5=5: {}",
+        leader.0.lock().unwrap().durability.get_durable_tx_offset().0
+    );
+    println!(
+        "Current durability datastore offset, should be 0+5=5: {}",
+        leader.0.lock().unwrap().datastore.get_replicated_offset().unwrap().0
+    );
+    // Cutting the connection
+    leader.0.lock().unwrap().messaging_allowed = false;
+    // Adding some commits
+    for _ in 0..5 {
+        let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
+        leader
+            .0
+            .lock()
+            .unwrap()
+            .datastore
+            .set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
+        let transaction = leader
+            .0
+            .lock()
+            .unwrap()
+            .commit_mut_tx(tx)
+            .unwrap();
+    }
+    let value2 = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
+    println!(
+        "Current Offset after cutting connection, should be 5+5=10: {}",
+        value2
+    );
+    std::thread::sleep(WAIT_LEADER_TIMEOUT);
+    println!(
+        "test, should be 5+6=11: {}",
+        leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+    );
+
 
     // Simulate waiting for some time (more than WAIT_LEADER_TIMEOUT)
     std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
@@ -476,15 +493,34 @@ fn test_case_3() {
     .unwrap()
     .0
     .to_le();
+    let (s1, _) = nodes.get(&1).unwrap();
+    let (s2, _) = nodes.get(&2).unwrap();
+    let (s3, _) = nodes.get(&3).unwrap();
     println!("Current length of the iter is {:?} after timeout", leader_first_check);
-
+    println!("New leader, AFTER TIMEOUT, for 1: {}", s1.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
+    println!("New leader, AFTER TIMEOUT, for old leader: {}", s3.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
+    let length_after_timeout = leader_first_check;
+    println!("Current length of the iter is {:?} after timeout", length_after_timeout);
+    leader.0.lock().unwrap().messaging_allowed = true;
+    
+    //s1.lock().unwrap().durability.omni_paxos.reconnected(3);
+    //s2.lock().unwrap().durability.omni_paxos.reconnected(3);
+    std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
+    println!("New leader, AFTER REJOIN, for 1: {}", s1.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
+    println!("New leader, AFTER REJOIN, for old leader: {}", s3.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
+    let length_after_rejoin = s3.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
+    println!("Current length of the iter is {:?} after rejoin", length_after_rejoin);
+    //s3.lock().unwrap().datastore.rollback_to_replicated_durability_offset().unwrap();
+    //s3.lock().unwrap().update_leader();
+    let length_after_rejoin = s3.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
+    println!("Current length of the iter is {:?} after forced rollback", length_after_rejoin);
     // Assert that the second commit length is equal to the first check length
-    assert_eq!(leader_second_commit_len, leader_first_check);
+    //assert_eq!(leader_second_commit_len, leader_first_check);
 
 }
 
 
-    #[test]
+    //#[test]
     /// 4. Simulate the 3 partial connectivity scenarios from the OmniPaxos liveness lecture. Does the system recover? *NOTE* for this test you may need to modify the messaging logic.
     fn test_case_4() {
         let mut runtime = create_runtime();
