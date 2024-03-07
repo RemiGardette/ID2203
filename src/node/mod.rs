@@ -65,8 +65,11 @@ impl NodeRunner {
                 },
                 _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
                 _ = datastore_update_interval.tick() => { 
-                    // We update the datastore on every nodes at a regular interval, to avoid having to catch up on too much content at once when the leader changes
-                    self.node.lock().unwrap().apply_replicated_txns();
+                    // We update the datastore on every follower node at a regular interval, to avoid having to catch up on too much content at once when the leader changes
+                    let current_leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
+                    if current_leader_pid != Some(self.node.lock().unwrap().node_id) {
+                        self.node.lock().unwrap().apply_replicated_txns();
+                    }
                 },
                 Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg); },
                 else => { }
@@ -351,12 +354,6 @@ mod tests {
         let nodes = spawn_nodes(&mut runtime);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
         let (first_server, _) = nodes.get(&1).unwrap();
-        // let leader = first_server
-        //     .lock()
-        //     .unwrap()
-        //     .get_current_leader()
-        //     .expect("Failed to get leader");
-        // println!("Elected leader: {}", leader);
     }
 
     #[test]
