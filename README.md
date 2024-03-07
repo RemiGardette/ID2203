@@ -16,6 +16,6 @@ Run the DataStore in a replicated Manner
 
 ### Task
 - [x] Implement OmniPaxosDurability struct provided in the skeleton code
-- [ ] Implement the Node struct using the provided Data Store and OmniPaxosDurability
-- [ ] Use an async runtime such as Tokio to spawn multiple instances of Node that together form the Datastore RSM running on OmniPaxos
-- [ ] Show that the system can pass the described test cases in the repository
+- [x] Implement the Node struct using the provided Data Store and OmniPaxosDurability
+- [x] Use an async runtime such as Tokio to spawn multiple instances of Node that together form the Datastore RSM running on OmniPaxos
+- [x] Show that the system can pass the described test cases in the repository
