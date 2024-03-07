@@ -56,6 +56,7 @@ impl NodeRunner {
                 biased;
                 _ = tick_interval.tick() => { 
                     self.node.lock().unwrap().durability.omni_paxos.tick(); 
+                    // We check whether the leader has changed to apply update_leader on the node
                     let current_leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
                     if leader_pid != current_leader_pid {
                         leader_pid = current_leader_pid;
@@ -63,7 +64,10 @@ impl NodeRunner {
                     }
                 },
                 _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
-                _ = datastore_update_interval.tick() => { self.node.lock().unwrap().apply_replicated_txns();},
+                _ = datastore_update_interval.tick() => { 
+                    // We update the datastore on every nodes at a regular interval, to avoid having to catch up on too much content at once when the leader changes
+                    self.node.lock().unwrap().apply_replicated_txns();
+                },
                 Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg); },
                 else => { }
             }
