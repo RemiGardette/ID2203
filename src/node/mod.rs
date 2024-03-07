@@ -24,6 +24,7 @@ const BATCH_SIZE: u64 = 100;
 const BATCH_PERIOD: Duration = Duration::from_millis(50);
 const DATASTORE_CATCHUP_PERIOD: Duration = Duration::from_millis(10000);
 
+
 pub struct NodeRunner {
     pub node: Arc<Mutex<Node>>,
     //Add the Messaging and running which is used for msging between the servers and for BLE
@@ -49,17 +50,23 @@ impl NodeRunner {
         let mut outgoing_interval = time::interval(OUTGOING_MESSAGE_PERIOD);
         let mut tick_interval = time::interval(TICK_PERIOD);
         let mut datastore_update_interval = time::interval(DATASTORE_CATCHUP_PERIOD);
+        let mut leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
         loop {
             tokio::select! {
                 biased;
-                _ = tick_interval.tick() => { self.node.lock().unwrap().durability.omni_paxos.tick(); },
+                _ = tick_interval.tick() => { 
+                    self.node.lock().unwrap().durability.omni_paxos.tick(); 
+                    let current_leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
+                    if leader_pid != current_leader_pid {
+                        leader_pid = current_leader_pid;
+                        self.node.lock().unwrap().update_leader();
+                    }
+                },
                 _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
                 _ = datastore_update_interval.tick() => { self.node.lock().unwrap().apply_replicated_txns();},
                 Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg); },
                 else => { }
             }
-            let mut node = self.node.lock().unwrap();
-            node.update_leader();
         }
     }
     
