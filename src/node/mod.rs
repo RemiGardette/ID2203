@@ -63,7 +63,10 @@ impl NodeRunner {
                         self.node.lock().unwrap().update_leader();
                     }
                 },
-                _ = outgoing_interval.tick() => { self.send_outgoing_msgs().await; },
+                _ = outgoing_interval.tick() => { 
+                    if self.node.lock().unwrap().messaging_allowed{
+                    self.send_outgoing_msgs().await;}
+                 },
                 _ = datastore_update_interval.tick() => { 
                     // We update the datastore on every follower node at a regular interval, to avoid having to catch up on too much content at once when the leader changes
                     let current_leader_pid = self.node.lock().unwrap().durability.omni_paxos.get_current_leader();
@@ -71,7 +74,9 @@ impl NodeRunner {
                         self.node.lock().unwrap().apply_replicated_txns();
                     }
                 },
-                Some(in_msg) = self.incoming.recv() => { self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg); },
+                Some(in_msg) = self.incoming.recv() => { if self.node.lock().unwrap().messaging_allowed{
+                    self.node.lock().unwrap().durability.omni_paxos.handle_incoming(in_msg);}
+                },
                 else => { }
             }
         }
@@ -82,7 +87,8 @@ impl NodeRunner {
 pub struct Node {
     node_id: NodeId, // Unique identifier for the node
     durability: OmniPaxosDurability,        
-    datastore: ExampleDatastore        // TODO Datastore and OmniPaxosDurability
+    datastore: ExampleDatastore,        // TODO Datastore and OmniPaxosDurability
+    messaging_allowed: bool,
 }
 
 impl Node {
@@ -91,6 +97,7 @@ impl Node {
             node_id,
             durability: omni_durability,
             datastore: ExampleDatastore::new(),
+            messaging_allowed: true,
         };
         return node
     }
@@ -249,6 +256,39 @@ mod tests {
         }
         nodes
     }
+
+    fn spawn_nodes_with_modifiable_channels(runtime: &mut Runtime) -> HashMap<NodeId, (Arc<Mutex<Node>>, JoinHandle<()>)> {
+        let mut nodes = HashMap::new();
+        let (sender_channels, mut receiver_channels) = initialise_channels();
+        for pid in SERVERS {
+            // todo!("spawn the nodes")
+            let server_config = ServerConfig{
+                pid,
+                election_tick_timeout: ELECTION_TICK_TIMEOUT,
+                ..Default::default()
+            };
+            let cluster_config = ClusterConfig{
+                configuration_id: 1,
+                nodes: SERVERS.into(),
+                ..Default::default()
+            };
+            let durability = OmniPaxosDurability::new(server_config.clone(), cluster_config.clone()).unwrap();
+            let node: Arc<Mutex<Node>> = Arc::new(Mutex::new(Node::new(pid, durability)));
+            let mut node_runner = NodeRunner {
+                node: node.clone(),
+                incoming: receiver_channels.remove(&pid).unwrap(),
+                outgoing: sender_channels.clone(),
+            };
+            let join_handle = runtime.spawn({
+                async move {
+                    node_runner.run().await;
+                }
+            });
+            nodes.insert(pid, ( node, join_handle));
+        }
+        nodes
+    }
+
 
     #[test]
     fn basic_test_cluster_size() {
