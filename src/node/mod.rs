@@ -209,12 +209,26 @@ mod tests {
     const SERVERS: [NodeId; 5] = [1, 2, 3, 4, 5];
 
     #[allow(clippy::type_complexity)]
-    fn initialise_channels() -> (
+    fn initialise_channels(server_number: u64) -> (
         HashMap<NodeId, mpsc::Sender<Message<Log>>>,
         HashMap<NodeId, mpsc::Receiver<Message<Log>>>,
     ) {
         let mut sender_channels = HashMap::new();
         let mut receiver_channels = HashMap::new();
+        if server_number == 0 {
+            for pid in SERVERS {
+                let (sender, receiver) = mpsc::channel(100);
+                sender_channels.insert(pid, sender);
+                receiver_channels.insert(pid, receiver);
+            }
+        }
+        else {
+            for k in 1..server_number+1 {
+                let (sender, receiver) = mpsc::channel(100);
+                sender_channels.insert(k, sender);
+                receiver_channels.insert(k, receiver);
+            }
+        }
         for pid in SERVERS {
             let (sender, receiver) = mpsc::channel(100);
             sender_channels.insert(pid, sender);
@@ -231,9 +245,9 @@ mod tests {
             .unwrap()
     }
 
-    fn spawn_nodes(runtime: &mut Runtime) -> HashMap<NodeId, (Arc<Mutex<Node>>, JoinHandle<()>)> {
+    fn spawn_nodes(runtime: &mut Runtime, node_number:u64) -> HashMap<NodeId, (Arc<Mutex<Node>>, JoinHandle<()>)> {
         let mut nodes = HashMap::new();
-        let (sender_channels, mut receiver_channels) = initialise_channels();
+        let (sender_channels, mut receiver_channels) = initialise_channels(node_number);
         for pid in SERVERS {
             // todo!("spawn the nodes")
             let server_config = ServerConfig{
@@ -266,7 +280,7 @@ mod tests {
     //#[test]
     fn basic_test_cluster_size() {
         let mut runtime = create_runtime();
-        let nodes = spawn_nodes(&mut runtime);
+        let nodes = spawn_nodes(&mut runtime,0);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
         assert_eq!(SERVERS.len(), nodes.len());
     }
@@ -502,7 +516,7 @@ mod tests {
     /// First Scenario Quorum-Loss Scenario
     fn test_case_4_loss() {
         let mut runtime = create_runtime();
-        let nodes = spawn_nodes(&mut runtime);
+        let nodes = spawn_nodes(&mut runtime,0);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
         let (first_server, _) = nodes.get(&1).unwrap();
         let leader = first_server
@@ -514,18 +528,17 @@ mod tests {
         println!("Elected leader: {}", leader);
         let leader_to_be = 1 as u64;
         let (leader_to_be_node, _) = nodes.get(&leader_to_be).unwrap();
-        for pid in SERVERS {
+        /*for pid in SERVERS {
             if pid != leader_to_be {
                 let (server, _) = nodes.get(&pid).unwrap();
                 for servers in server.
-            }
+            }*/
         }
 
 
 
 
 
-    }
 
     #[test]
     /// 4. Simulate the 3 partial connectivity scenarios from the OmniPaxos liveness lecture. Does the system recover? *NOTE* for this test you may need to modify the messaging logic.
@@ -547,15 +560,18 @@ mod tests {
     /// Chained Scenario 
     fn test_case_4_chained() {
         let mut runtime = create_runtime();
-        let nodes = spawn_nodes(&mut runtime);
+        let nodes = spawn_nodes(&mut runtime,3);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
         let (first_server, _) = nodes.get(&1).unwrap();
-        // let leader = first_server
-        //     .lock()
-        //     .unwrap()
-        //     .get_current_leader()
-        //     .expect("Failed to get leader");
-        // println!("Elected leader: {}", leader);
+        let leader = first_server
+            .lock()
+            .unwrap()
+            .durability
+            .omni_paxos
+            .get_current_leader()
+            .expect("Failed to get leader");
+        println!("Elected leader: {}", leader);
+
     }
 
 
