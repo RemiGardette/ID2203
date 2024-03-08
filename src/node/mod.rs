@@ -12,8 +12,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::{sync::mpsc, time};
 
-use self::example_datastore::MutTx;
-
 const BUFFER_SIZE: usize = 10000;
 const ELECTION_TICK_TIMEOUT: u64 = 5;
 const TICK_PERIOD: Duration = Duration::from_millis(10);
@@ -125,10 +123,12 @@ impl Node {
     /// behavior in the Datastore as defined by the application.
     fn apply_replicated_txns(&mut self) {
         self.advance_replicated_durability_offset().unwrap();
-        let currentTxOffset = self.durability.get_durable_tx_offset();
-        let mut txns = self.durability.iter_starting_from_offset(currentTxOffset);
-        while let Some((offset, tx_data)) = txns.next() {
-            self.datastore.replay_transaction(&tx_data); 
+        let current_tx_offset = self.durability.get_durable_tx_offset();
+        let mut txns = self.durability.iter_starting_from_offset(current_tx_offset);
+        while let Some((_tx_offset, tx_data)) = txns.next() {
+            if let Err(err) = self.datastore.replay_transaction(&tx_data) {
+                println!("Error: {}", err);
+            }
         }
     }
 
@@ -196,11 +196,9 @@ impl Node {
 mod tests {
     use crate::{durability, node::*};
     use omnipaxos::messages::Message;
-    use omnipaxos::util::{NodeId};
-    use omnipaxos::{ClusterConfig, OmniPaxosConfig, ServerConfig};
+    use omnipaxos::{ClusterConfig, ServerConfig};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
-    use omnipaxos_storage::memory_storage::MemoryStorage;
     use tokio::runtime::{Builder, Runtime};
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
