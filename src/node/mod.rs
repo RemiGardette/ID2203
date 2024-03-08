@@ -572,9 +572,9 @@ mod tests {
 
         std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
         let new_leader = nodes.get(&leader_to_be).unwrap().0.lock().unwrap().durability.omni_paxos.get_current_leader().expect("Failed to get leader");
-        println!("Newly elected leader {:?}", new_leader)
+        println!("Newly elected leader {:?}", new_leader);
 
-
+    }
 
 
 
