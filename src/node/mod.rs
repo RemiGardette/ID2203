@@ -248,31 +248,62 @@ mod tests {
     fn spawn_nodes(runtime: &mut Runtime, node_number:u64) -> HashMap<NodeId, (Arc<Mutex<Node>>, JoinHandle<()>)> {
         let mut nodes = HashMap::new();
         let (sender_channels, mut receiver_channels) = initialise_channels(node_number);
-        for pid in SERVERS {
-            // todo!("spawn the nodes")
-            let server_config = ServerConfig{
-                pid,
-                election_tick_timeout: ELECTION_TICK_TIMEOUT,
-                ..Default::default()
-            };
-            let cluster_config = ClusterConfig{
-                configuration_id: 1,
-                nodes: SERVERS.into(),
-                ..Default::default()
-            };
-            let durability = OmniPaxosDurability::new(server_config.clone(), cluster_config.clone()).unwrap();
-            let node: Arc<Mutex<Node>> = Arc::new(Mutex::new(Node::new(pid, durability, SERVERS.len() as u64)));
-            let mut node_runner = NodeRunner {
-                node: node.clone(),
-                incoming: receiver_channels.remove(&pid).unwrap(),
-                outgoing: sender_channels.clone(),
-            };
-            let join_handle = runtime.spawn({
-                async move {
-                    node_runner.run().await;
-                }
-            });
-            nodes.insert(pid, ( node, join_handle));
+        if node_number == 0 {
+            for pid in SERVERS {
+                // todo!("spawn the nodes")
+                let server_config = ServerConfig{
+                    pid,
+                    election_tick_timeout: ELECTION_TICK_TIMEOUT,
+                    ..Default::default()
+                };
+                let cluster_config = ClusterConfig{
+                    configuration_id: 1,
+                    nodes: SERVERS.into(),
+                    ..Default::default()
+                };
+                let durability = OmniPaxosDurability::new(server_config.clone(), cluster_config.clone()).unwrap();
+                let node: Arc<Mutex<Node>> = Arc::new(Mutex::new(Node::new(pid, durability, SERVERS.len() as u64)));
+                let mut node_runner = NodeRunner {
+                    node: node.clone(),
+                    incoming: receiver_channels.remove(&pid).unwrap(),
+                    outgoing: sender_channels.clone(),
+                };
+                let join_handle = runtime.spawn({
+                    async move {
+                        node_runner.run().await;
+                    }
+                });
+                nodes.insert(pid, ( node, join_handle));
+            }
+        }
+        else {
+            for pid in 1..node_number+1 {
+                // todo!("spawn the nodes")
+                let server_config = ServerConfig{
+                    pid,
+                    election_tick_timeout: ELECTION_TICK_TIMEOUT,
+                    ..Default::default()
+                };
+                let vec: Vec<u64> = (1..=node_number).collect();
+                let cluster_config = ClusterConfig{
+                    configuration_id: 1,
+                    nodes: vec,
+                    ..Default::default()
+                };
+                let durability = OmniPaxosDurability::new(server_config.clone(), cluster_config.clone()).unwrap();
+                let node: Arc<Mutex<Node>> = Arc::new(Mutex::new(Node::new(pid, durability, node_number as u64)));
+                let mut node_runner = NodeRunner {
+                    node: node.clone(),
+                    incoming: receiver_channels.remove(&pid).unwrap(),
+                    outgoing: sender_channels.clone(),
+                };
+                let join_handle = runtime.spawn({
+                    async move {
+                        node_runner.run().await;
+                    }
+                });
+                nodes.insert(pid, ( node, join_handle));
+            }
         }
         nodes
     }
@@ -541,7 +572,8 @@ mod tests {
 
         std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
         let new_leader = nodes.get(&leader_to_be).unwrap().0.lock().unwrap().durability.omni_paxos.get_current_leader().expect("Failed to get leader");
-        println!("Newly elected leader {:?}", new_leader)
+        println!("Newly elected leader {:?}", new_leader);
+    }
 
 
 
@@ -555,7 +587,7 @@ mod tests {
     /// Constrained-Election Scenario
     fn test_case_4_constrained() {
         let mut runtime = create_runtime();
-        let nodes = spawn_nodes(&mut runtime);
+        let nodes = spawn_nodes(&mut runtime, 0);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
         let (first_server, _) = nodes.get(&1).unwrap();
         // let leader = first_server
@@ -572,16 +604,24 @@ mod tests {
         let mut runtime = create_runtime();
         let nodes = spawn_nodes(&mut runtime,3);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
-        let (first_server, _) = nodes.get(&1).unwrap();
-        let leader = first_server
+        let (server1, _) = nodes.get(&1).unwrap();
+        let leader_pid = server1
             .lock()
             .unwrap()
             .durability
             .omni_paxos
             .get_current_leader()
             .expect("Failed to get leader");
-        println!("Elected leader: {}", leader);
-
+        println!("Elected leader: {}", leader_pid);
+        let mut server2 = nodes.get(&2).unwrap().0.lock().unwrap();
+        let mut leader = nodes.get(&leader_pid).unwrap().0.lock().unwrap();
+        server2.connected_nodes[3-1] = false;
+        leader.connected_nodes[2-1] = false;
+        println!("Leader connections: {:?}", leader.connected_nodes);
+        println!("Server2 connections: {:?}", server2.connected_nodes);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT*2);
+        let new_leader = server2.durability.omni_paxos.get_current_leader().expect("Failed to get leader");
+        println!("Newly elected leader {:?}", new_leader);
     }
 
 
