@@ -385,75 +385,75 @@ mod tests {
 
 //     // Assuming you have already obtained the leader_pid and nodes HashMap
 
-//     let leader = nodes.get(&leader_pid).unwrap();
+// let leader = nodes.get(&leader_pid).unwrap();
 
-    for _ in 0..5 {
-        let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
-        leader
-            .0
-            .lock()
-            .unwrap()
-            .datastore
-            .set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
-        let transaction = leader
-            .0
-            .lock()
-            .unwrap()
-            .commit_mut_tx(tx)
-            .unwrap();
-        leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
-    }
-    println!(
-        "Current Offset before cutting connection, should be 0+5=5: {}",
-        leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
-    );
+// for _ in 0..5 {
+//     let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
+//     leader
+//         .0
+//         .lock()
+//         .unwrap()
+//         .datastore
+//         .set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
+//     let transaction = leader
+//         .0
+//         .lock()
+//         .unwrap()
+//         .commit_mut_tx(tx)
+//         .unwrap();
+//     leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
+// }
+// println!(
+//     "Current Offset before cutting connection, should be 0+5=5: {}",
+//     leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+// );
 
-    std::thread::sleep(WAIT_LEADER_TIMEOUT);
-    println!("Replicated logs: {:?}", leader.0.lock().unwrap().durability.iter().collect::<Vec<_>>());
-    println!(
-        "test, should be 0+5=5: {}",
-        leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
-    );
-    println!(
-        "test, should be 0+5=5: {}",
-        leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
-    );
-    println!(
-        "Current durability offset, should be 0+5=5: {}",
-        leader.0.lock().unwrap().durability.get_durable_tx_offset().0
-    );
-    println!(
-        "Current durability datastore offset, should be 0+5=5: {}",
-        leader.0.lock().unwrap().datastore.get_replicated_offset().unwrap().0
-    );
-    // Cutting the connection
-    leader.0.lock().unwrap().messaging_allowed = false;
-    // Adding some commits
-    for _ in 0..5 {
-        let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
-        leader
-            .0
-            .lock()
-            .unwrap()
-            .datastore
-            .set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
-        let transaction = leader
-            .0
-            .lock()
-            .unwrap()
-            .commit_mut_tx(tx)
-            .unwrap();
-    }
-    let value2 = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
-    println!(
-        "Current Offset after cutting connection, should be 5+5=10: {}",
-        value2
-    );
-    std::thread::sleep(WAIT_LEADER_TIMEOUT);
-    println!(
-        "test, should be 5+6=11: {}",
-        leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
-    );
+//     std::thread::sleep(WAIT_LEADER_TIMEOUT);
+//     println!("Replicated logs: {:?}", leader.0.lock().unwrap().durability.iter().collect::<Vec<_>>());
+//     println!(
+//         "test, should be 0+5=5: {}",
+//         leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+//     );
+//     println!(
+//         "test, should be 0+5=5: {}",
+//         leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+//     );
+//     println!(
+//         "Current durability offset, should be 0+5=5: {}",
+//         leader.0.lock().unwrap().durability.get_durable_tx_offset().0
+//     );
+//     println!(
+//         "Current durability datastore offset, should be 0+5=5: {}",
+//         leader.0.lock().unwrap().datastore.get_replicated_offset().unwrap().0
+//     );
+//     // Cutting the connection
+//     leader.0.lock().unwrap().messaging_allowed = false;
+//     // Adding some commits
+//     for _ in 0..5 {
+//         let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
+//         leader
+//             .0
+//             .lock()
+//             .unwrap()
+//             .datastore
+//             .set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
+//         let transaction = leader
+//             .0
+//             .lock()
+//             .unwrap()
+//             .commit_mut_tx(tx)
+//             .unwrap();
+//     }
+//     let value2 = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
+//     println!(
+//         "Current Offset after cutting connection, should be 5+5=10: {}",
+//         value2
+//     );
+//     std::thread::sleep(WAIT_LEADER_TIMEOUT);
+//     println!(
+//         "test, should be 5+6=11: {}",
+//         leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+//     );
 
 
 //     // Simulate waiting for some time (more than WAIT_LEADER_TIMEOUT)
