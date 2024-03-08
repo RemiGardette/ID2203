@@ -38,6 +38,7 @@ impl NodeRunner {
         let messages = self.node.lock().unwrap().durability.omni_paxos.outgoing_messages();
         for msg in messages {
             let receiver = msg.get_receiver();
+            if()
             let channel = self
                 .outgoing
                 .get_mut(&receiver)
@@ -87,15 +88,17 @@ pub struct Node {
     durability: OmniPaxosDurability,        
     datastore: ExampleDatastore,        // TODO Datastore and OmniPaxosDurability
     messaging_allowed: bool,
+    connected_nodes: Vec<bool>
 }
 
 impl Node {
-    pub fn new(node_id: NodeId, omni_durability: OmniPaxosDurability) -> Self {
+    pub fn new(node_id: NodeId, omni_durability: OmniPaxosDurability, number_of_nodes: u64) -> Self {
         let node = Node {
             node_id,
             durability: omni_durability,
             datastore: ExampleDatastore::new(),
             messaging_allowed: true,
+            connected_nodes: vec![true; number_of_nodes as usize],
         };
         return node
     }
@@ -241,7 +244,7 @@ mod tests {
                 ..Default::default()
             };
             let durability = OmniPaxosDurability::new(server_config.clone(), cluster_config.clone()).unwrap();
-            let node: Arc<Mutex<Node>> = Arc::new(Mutex::new(Node::new(pid, durability)));
+            let node: Arc<Mutex<Node>> = Arc::new(Mutex::new(Node::new(pid, durability, SERVERS.len() as u64)));
             let mut node_runner = NodeRunner {
                 node: node.clone(),
                 incoming: receiver_channels.remove(&pid).unwrap(),
@@ -478,9 +481,41 @@ fn test_case_3() {
 }
 
 
-    //#[test]
+    #[test]
     /// 4. Simulate the 3 partial connectivity scenarios from the OmniPaxos liveness lecture. Does the system recover? *NOTE* for this test you may need to modify the messaging logic.
-    fn test_case_4() {
+    /// First Scenario Quorum-Loss Scenario
+    fn test_case_4_loss() {
+        let mut runtime = create_runtime();
+        let nodes = spawn_nodes(&mut runtime);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let (first_server, _) = nodes.get(&1).unwrap();
+        // let leader = first_server
+        //     .lock()
+        //     .unwrap()
+        //     .get_current_leader()
+        //     .expect("Failed to get leader");
+        // println!("Elected leader: {}", leader);
+    }
+
+    #[test]
+    /// 4. Simulate the 3 partial connectivity scenarios from the OmniPaxos liveness lecture. Does the system recover? *NOTE* for this test you may need to modify the messaging logic.
+    /// Constrained-Election Scenario
+    fn test_case_4_constrained() {
+        let mut runtime = create_runtime();
+        let nodes = spawn_nodes(&mut runtime);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        let (first_server, _) = nodes.get(&1).unwrap();
+        // let leader = first_server
+        //     .lock()
+        //     .unwrap()
+        //     .get_current_leader()
+        //     .expect("Failed to get leader");
+        // println!("Elected leader: {}", leader);
+    }
+    #[test]
+    /// 4. Simulate the 3 partial connectivity scenarios from the OmniPaxos liveness lecture. Does the system recover? *NOTE* for this test you may need to modify the messaging logic.
+    /// Chained Scenario 
+    fn test_case_4_chained() {
         let mut runtime = create_runtime();
         let nodes = spawn_nodes(&mut runtime);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
