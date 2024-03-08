@@ -543,27 +543,56 @@ mod tests {
         let new_leader = nodes.get(&leader_to_be).unwrap().0.lock().unwrap().durability.omni_paxos.get_current_leader().expect("Failed to get leader");
         println!("Newly elected leader {:?}", new_leader)
 
-
-
-
-
-
-
+    }
 
     #[test]
     /// 4. Simulate the 3 partial connectivity scenarios from the OmniPaxos liveness lecture. Does the system recover? *NOTE* for this test you may need to modify the messaging logic.
     /// Constrained-Election Scenario
     fn test_case_4_constrained() {
         let mut runtime = create_runtime();
-        let nodes = spawn_nodes(&mut runtime);
+        let nodes = spawn_nodes(&mut runtime,0);
         std::thread::sleep(WAIT_LEADER_TIMEOUT);
         let (first_server, _) = nodes.get(&1).unwrap();
-        // let leader = first_server
-        //     .lock()
-        //     .unwrap()
-        //     .get_current_leader()
-        //     .expect("Failed to get leader");
-        // println!("Elected leader: {}", leader);
+        
+        //Get the leader
+        let leader = first_server
+            .lock()
+            .unwrap()
+            .durability.omni_paxos
+            .get_current_leader()
+            .expect("Failed to get leader");
+        println!("Elected leader: {}", leader);
+
+
+        //Step 1
+        //For all the servers that is not the leader and it should only be connected to a common server that is not yet a leader
+        for pid in SERVERS {
+            if pid != leader {
+                let (server, _) = nodes.get(&pid).unwrap();
+                server.lock().unwrap().connected_nodes[leader as usize-1] = false;
+            }
+        }
+
+        //Give some time
+        std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
+
+        //Step 2
+        //Isolate the leader
+        let (server, _) = nodes.get(&leader).unwrap();
+        server.lock().unwrap().messaging_allowed = false;
+
+        //Give some time for the effect to take place
+        std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
+
+        //Print the leader for the isolated old leader
+        let isolated_leader = server.lock().unwrap().durability.omni_paxos.get_current_leader().expect("Failed to get leader");
+        println!("Leader for the old Isolated leader: {}", isolated_leader);
+
+        //Step 3
+        //Get the new leader from a node that is not the leader
+        let new_leader = nodes.get(&2).unwrap().0.lock().unwrap().durability.omni_paxos.get_current_leader().expect("Failed to get leader");
+        println!("New Elected leader: {}", new_leader);
+        
     }
     #[test]
     /// 4. Simulate the 3 partial connectivity scenarios from the OmniPaxos liveness lecture. Does the system recover? *NOTE* for this test you may need to modify the messaging logic.
