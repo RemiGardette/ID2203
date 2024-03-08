@@ -512,6 +512,17 @@ mod tests {
             .get_current_leader()
             .expect("Failed to get leader");
         println!("Elected leader: {}", leader);
+        let leader_to_be = 1 as u64;
+        let (leader_to_be_node, _) = nodes.get(&leader_to_be).unwrap();
+        for pid in SERVERS {
+            if pid != leader_to_be {
+                let (server, _) = nodes.get(&pid).unwrap();
+                for servers in server.
+            }
+        }
+
+
+
 
 
     }
