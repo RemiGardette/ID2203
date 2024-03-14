@@ -339,7 +339,7 @@ mod tests {
         let transaction = leader.0.lock().unwrap().commit_mut_tx(tx).unwrap();
         leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
         // After committing the transaction, check the leader status
-        std::thread::sleep(TICK_PERIOD);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT);
         let leader_iter = leader.0.lock().unwrap().durability.iter();
         let leader_offset = leader.0.lock().unwrap().durability.get_durable_tx_offset();
         let leader_collected: Vec<_> = leader_iter.collect();
@@ -354,6 +354,8 @@ mod tests {
             }
         
         //Here we will assert that a node which is not a leader cannot commit
+
+            
         }
     }
     
@@ -406,8 +408,6 @@ mod tests {
 
     }
 
-    /// 3. Find the leader and commit a transaction. Disconnect the leader from the other nodes and continue to commit transactions before the OmniPaxos election timeout.
-    /// Verify that the transaction was first committed in memory but later rolled back.
     #[test]
     // 3. Find the leader and commit a transaction. Disconnect the leader from the other nodes and continue to commit transactions before the OmniPaxos election timeout.
     // Verify that the transaction was first committed in memory but later rolled back.
@@ -429,33 +429,7 @@ mod tests {
             first_server.lock().unwrap().durability.get_durable_tx_offset().0
         );
         // Assuming you have already obtained the leader_pid and nodes HashMap
-    let leader = nodes.get(&leader_pid).unwrap();
-    for _ in 0..5 {
-        let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
-        leader
-            .0
-            .lock()
-            .unwrap()
-            .datastore
-            .set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
-        let transaction = leader
-            .0
-            .lock()
-            .unwrap()
-            .commit_mut_tx(tx)
-            .unwrap();
-        leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
-    }
-    let offset_before_cutting_connection = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0;
-    println!(
-        "Current Offset before cutting connection, should be 0+5=5: {}",
-        offset_before_cutting_connection
-    );
-        // Simulate waiting for some time to allow omnipaxos to commit the transactions
-        std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
-        // Cutting the connection
-        leader.0.lock().unwrap().messaging_allowed = false;
-        // Adding some commits
+        let leader = nodes.get(&leader_pid).unwrap();
         for _ in 0..5 {
             let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
             leader
@@ -470,15 +444,51 @@ mod tests {
                 .unwrap()
                 .commit_mut_tx(tx)
                 .unwrap();
+            leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
         }
+        let offset_before_cutting_connection = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0;
+        println!(
+            "Current Offset before cutting connection, should be 0+5=5: {}",
+            offset_before_cutting_connection
+        );
+
+        assert_eq!(offset_before_cutting_connection, 5);
+        
+        // Simulate waiting for some time to allow omnipaxos to commit the transactions
+        std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
+
+        // Cutting the connection
+        leader.0.lock().unwrap().messaging_allowed = false;
+
+        // Adding some commits
+        for _ in 0..5 {
+            let mut tx = leader.0.lock().unwrap().begin_mut_tx().unwrap();
+            leader
+                .0
+                .lock()
+                .unwrap()
+                .datastore
+                .set_mut_tx(&mut tx, "key1".to_string(), "value1".to_string());
+            let _transaction = leader
+                .0
+                .lock()
+                .unwrap()
+                .commit_mut_tx(tx)
+                .unwrap();
+        }
+
         let offset_after_cutting_connection = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
+
         println!(
             "Current Offset after cutting connection, should be 5+5=10: {}",
             offset_after_cutting_connection
         );
+
+        assert_eq!(offset_after_cutting_connection, 10);
+
         // Simulate waiting for some time (more than WAIT_LEADER_TIMEOUT)
         std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
-        // Verify that the transaction was rolled back after the timeout
+
         // Verify that the transaction was rolled back after the timeout
         let leader_first_check = leader
         .0
@@ -490,19 +500,23 @@ mod tests {
         .0
         .to_le();
         let (s1, _) = nodes.get(&1).unwrap();
+
         println!("Current length of the iter is {:?} after timeout", leader_first_check);
         println!("New leader, AFTER TIMEOUT, for 1: {}", s1.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
         println!("New leader, AFTER TIMEOUT, for old leader: {}", leader.0.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
+
         // reconnect the old leader
         leader.0.lock().unwrap().messaging_allowed = true;
         std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
+
         // check if the leaders are synchronized
         println!("New leader, AFTER REJOIN, for 1: {}", s1.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
         println!("New leader, AFTER REJOIN, for old leader: {}", leader.0.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
+
+        // check if the offset is the same as the replicated one at the beginning (5)
         let length_after_rejoin = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
-        println!("Current length of the iter is {:?} after rejoin", length_after_rejoin);
-        let curr_offset_s1 = s1.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
-        println!("Current length of the iter is {:?} after rejoin for 1", curr_offset_s1);
+        println!("Current length of the iter is {:?} after rejoin, it should be 5", length_after_rejoin);
+
         // Assert that the unreplicated offset on the old leader is 0 
         assert_eq!(length_after_rejoin, offset_before_cutting_connection);
     }
