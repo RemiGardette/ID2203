@@ -441,28 +441,13 @@ mod tests {
          .unwrap();
      leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
  }
+ let offset_before_cutting_connection = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0;
  println!(
      "Current Offset before cutting connection, should be 0+5=5: {}",
-     leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+     offset_before_cutting_connection
  );
-     std::thread::sleep(WAIT_LEADER_TIMEOUT);
-     println!("Replicated logs: {:?}", leader.0.lock().unwrap().durability.iter().collect::<Vec<_>>());
-     println!(
-         "test, should be 0+5=5: {}",
-         leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
-     );
-     println!(
-         "test, should be 0+5=5: {}",
-         leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
-     );
-     println!(
-         "Current durability offset, should be 0+5=5: {}",
-         leader.0.lock().unwrap().durability.get_durable_tx_offset().0
-     );
-     println!(
-         "Current durability datastore offset, should be 0+5=5: {}",
-         leader.0.lock().unwrap().datastore.get_replicated_offset().unwrap().0
-     );
+    // Simulate waiting for some time to allow omnipaxos to commit the transactions
+    std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
      // Cutting the connection
      leader.0.lock().unwrap().messaging_allowed = false;
      // Adding some commits
@@ -481,15 +466,10 @@ mod tests {
              .commit_mut_tx(tx)
              .unwrap();
      }
-     let value2 = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
+     let offset_after_cutting_connection = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
      println!(
          "Current Offset after cutting connection, should be 5+5=10: {}",
-         value2
-     );
-     std::thread::sleep(WAIT_LEADER_TIMEOUT);
-     println!(
-         "test, should be 5+6=11: {}",
-         leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0
+         offset_after_cutting_connection
      );
      // Simulate waiting for some time (more than WAIT_LEADER_TIMEOUT)
      std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
@@ -505,28 +485,21 @@ mod tests {
      .0
      .to_le();
      let (s1, _) = nodes.get(&1).unwrap();
-     let (s2, _) = nodes.get(&2).unwrap();
-     let (s3, _) = nodes.get(&3).unwrap();
      println!("Current length of the iter is {:?} after timeout", leader_first_check);
      println!("New leader, AFTER TIMEOUT, for 1: {}", s1.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
-     println!("New leader, AFTER TIMEOUT, for old leader: {}", s3.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
-     let length_after_timeout = leader_first_check;
-     println!("Current length of the iter is {:?} after timeout", length_after_timeout);
+     println!("New leader, AFTER TIMEOUT, for old leader: {}", leader.0.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
+     // reconnect the old leader
      leader.0.lock().unwrap().messaging_allowed = true;
-  
-     //s1.lock().unwrap().durability.omni_paxos.reconnected(3);
-     //s2.lock().unwrap().durability.omni_paxos.reconnected(3);
      std::thread::sleep(WAIT_LEADER_TIMEOUT * 2);
+     // check if the leaders are synchronized
      println!("New leader, AFTER REJOIN, for 1: {}", s1.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
-     println!("New leader, AFTER REJOIN, for old leader: {}", s3.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
-     let length_after_rejoin = s3.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
+     println!("New leader, AFTER REJOIN, for old leader: {}", leader.0.lock().unwrap().durability.omni_paxos.get_current_leader().unwrap());
+     let length_after_rejoin = leader.0.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
      println!("Current length of the iter is {:?} after rejoin", length_after_rejoin);
-     //s3.lock().unwrap().datastore.rollback_to_replicated_durability_offset().unwrap();
-     //s3.lock().unwrap().update_leader();
-     let length_after_rejoin = s3.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
-     println!("Current length of the iter is {:?} after forced rollback", length_after_rejoin);
-     // Assert that the second commit length is equal to the first check length
-     //assert_eq!(leader_second_commit_len, leader_first_check);
+     let curr_offset_s1 = s1.lock().unwrap().datastore.get_cur_offset().unwrap().0.to_le();
+     println!("Current length of the iter is {:?} after rejoin for 1", curr_offset_s1);
+     // Assert that the unreplicated offset on the old leader is 0 
+     assert_eq!(length_after_rejoin, offset_before_cutting_connection);
  }
 
 
