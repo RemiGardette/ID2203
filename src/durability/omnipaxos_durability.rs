@@ -53,8 +53,8 @@ impl DurabilityLayer for OmniPaxosDurability {
         if let Some(entries) = &self.omni_paxos.read_entries(..) {
             let entry_iter = entries.iter().flat_map(|entry| {
                 match entry {
-                    //It does not work to only get decided logs, maybe due to OmniPaxos pipelining
-                    LogEntry::Decided(log) | LogEntry::Undecided(log) => {
+                    // Only decided logs are returned
+                    LogEntry::Decided(log) => {
                         Some((log.tx_offset.clone(), log.tx_data.clone()))
                     }
                     _ => None,
@@ -74,8 +74,8 @@ impl DurabilityLayer for OmniPaxosDurability {
         if let Some(entries) = &self.omni_paxos.read_entries(..) {
             let entry_iter = entries.iter().filter_map(|entry| {
                 match entry {
-                    //It does not work to only get decided logs, maybe due to OmniPaxos pipelining
-                    LogEntry::Decided(log) | LogEntry::Undecided(log) => {
+                    // Only decided logs are returned
+                    LogEntry::Decided(log) => {
                         if log.tx_offset >= offset {
                             Some((log.tx_offset.clone(), log.tx_data.clone()))
                         } else {
