@@ -339,7 +339,10 @@ mod tests {
         let transaction = leader.0.lock().unwrap().commit_mut_tx(tx).unwrap();
         leader.0.lock().unwrap().durability.append_tx(transaction.tx_offset, transaction.tx_data);
         // After committing the transaction, check the leader status
-        std::thread::sleep(WAIT_LEADER_TIMEOUT);
+        std::thread::sleep(WAIT_LEADER_TIMEOUT*10);
+        let leader_tx = leader.0.lock().unwrap().begin_tx(DurabilityLevel::Memory);
+        let leader_value = leader_tx.get(&"key1".to_string());
+        println!("Leader value: {:?}", leader_value);
         let leader_iter = leader.0.lock().unwrap().durability.iter();
         let leader_offset = leader.0.lock().unwrap().durability.get_durable_tx_offset();
         let leader_collected: Vec<_> = leader_iter.collect();
@@ -352,11 +355,12 @@ mod tests {
                 assert_eq!(collected.len(), leader_collected.len());
                 assert_eq!(leader_offset, server.lock().unwrap().durability.get_durable_tx_offset());
             }
-        
-        //Here we will assert that a node which is not a leader cannot commit
-
-            
         }
+        std::thread::sleep(WAIT_LEADER_TIMEOUT*10);
+        let node_tx = nodes.get(&2).unwrap().0.lock().unwrap().begin_tx(DurabilityLevel::Replicated);
+        let node_value = node_tx.get(&"key1".to_string());
+        println!("Node value: {:?}", node_value);
+        assert_eq!(leader_value, node_value);
     }
     
 
