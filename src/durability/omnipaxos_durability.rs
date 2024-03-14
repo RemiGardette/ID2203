@@ -1,11 +1,8 @@
-use self::example_durability::ExampleDurabilityLayer;
-
 use super::*;
 use crate::datastore::{tx_data::TxData, TxOffset};
 use omnipaxos::errors::ConfigError;
 use omnipaxos::util::LogEntry;
-use omnipaxos::ProposeErr;
-use omnipaxos::{messages::Message, util::NodeId, OmniPaxos};
+use omnipaxos::OmniPaxos;
 use omnipaxos_storage::memory_storage::MemoryStorage;
 use omnipaxos::macros::Entry;
 use omnipaxos::ClusterConfig;
@@ -56,8 +53,8 @@ impl DurabilityLayer for OmniPaxosDurability {
         if let Some(entries) = &self.omni_paxos.read_entries(..) {
             let entry_iter = entries.iter().flat_map(|entry| {
                 match entry {
-                    //We read both the decided logs and undecided logs, maybe this behaviour will need to be adjusted later
-                    LogEntry::Decided(log) | LogEntry::Undecided(log) => {
+                    //It would not be safe to add undecided logs to the iterator, as they are not guaranteed to be durable
+                    LogEntry::Decided(log) => {
                         Some((log.tx_offset.clone(), log.tx_data.clone()))
                     }
                     _ => None,
@@ -77,8 +74,8 @@ impl DurabilityLayer for OmniPaxosDurability {
         if let Some(entries) = &self.omni_paxos.read_entries(..) {
             let entry_iter = entries.iter().filter_map(|entry| {
                 match entry {
-                    //We read both the decided logs and undecided logs, maybe this behaviour will need to be adjusted later
-                    LogEntry::Decided(log) | LogEntry::Undecided(log) => {
+                    //It would not be safe to add undecided logs to the iterator, as they are not guaranteed to be durable
+                    LogEntry::Decided(log) => {
                         if log.tx_offset >= offset {
                             Some((log.tx_offset.clone(), log.tx_data.clone()))
                         } else {
